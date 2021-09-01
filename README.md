@@ -30,7 +30,7 @@ make -j<num_threads>
 ### Training RMI - prerequisites
 To use the RMI train code, [install Rust](https://rustup.rs/).
 
-### Build index of reference DNA sequence
+### Build index of the reference DNA sequence
 ```sh
 # Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
 ./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
