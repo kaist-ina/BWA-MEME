@@ -45,7 +45,7 @@ gunzip human_g1k_v37.fasta.gz
 ./build_rmis_dna.sh <input.fasta>
 
 # We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
-# Two parameter files are required to run BWA-MEME
+# Two P-RMI model parameter files are required to run BWA-MEME
 https://ina.kaist.ac.kr/~bwa-meme/
 ```
 
