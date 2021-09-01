@@ -1,7 +1,7 @@
-### BWA-MEME
+### BWA-MEME: BWA-MEM emulated with a machine learning approach 
 
 BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
-It leverages learned index in suffix array search which requires ~118 GB for the human genome.
+It leverages **learned index** in **suffix array search** which requires ~118 GB for the human genome.
 BWA-MEME also provides feature to accomodate various memory size in servers.
 BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster. 
 
