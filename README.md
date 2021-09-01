@@ -27,7 +27,7 @@ make -j<num_threads> arch=avx2
 # If SSE4.1 (128-bit SIMD) is supported (default)
 make -j<num_threads>
 ```
-## Training RMI - prerequisites
+### Training RMI - prerequisites
 To use the RMI train code, [install Rust](https://rustup.rs/).
 
 ### Build index of reference DNA sequence
