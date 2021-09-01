@@ -29,6 +29,11 @@ make -j<num_threads>
 ```
 ### Training RMI - prerequisites
 To use the RMI train code, [install Rust](https://rustup.rs/).
+Download human_g1k_v37.fasta human genome
+```sh
+wget ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
+gunzip human_g1k_v37.fasta.gz
+```
 
 ### Build index of the reference DNA sequence
 ```sh
