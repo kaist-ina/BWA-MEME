@@ -72,7 +72,7 @@ diff <output_mem.sam> <output_meme.sam>
 
 ## Notes
 
-* BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads), it is recommended to have 128-192 GB RAM.
+* BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
 
 
 ## Citation
