@@ -35,6 +35,10 @@ make -j<num_threads>
 # Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
 ./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
 ./build_rmis_dna.sh <input.fasta>
+
+# We provide pretrained models for human_g1k_v37.fasta please download in the link below.
+# Two parameter files are required to run BWA-MEME
+https://ina.kaist.ac.kr/~bwa-meme/
 ```
 ### Run alignment and compare SAM output
 ```sh
