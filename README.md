@@ -1,0 +1,70 @@
+### BWA-MEME
+
+BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
+It leverages learned index in suffix array search which requires ~118 GB for the human genome.
+BWA-MEME also provides feature to accomodate various memory size in servers.
+BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster. 
+
+## To train RMI
+To use the RMI train code, [install Rust](https://rustup.rs/).
+
+
+## Getting Started
+### Compile the code
+```sh
+# Compile from source
+git clone https://github.com/kaist-ina/BWA-MEME.git BWA-MEME
+cd BWA-MEME
+
+# To find out vectorization features supported in your machine
+cat /proc/cpuinfo
+
+# If AVX512BW (512-bit SIMD) is supported
+make clean
+make -j<num_threads> arch=avx512
+
+# If AVX2 (256-bit SIMD) is supported
+make clean
+make -j<num_threads> arch=avx2
+
+# If SSE4.1 (128-bit SIMD) is supported (default)
+make -j<num_threads>
+```
+### Build index of reference DNA sequence
+```sh
+# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
+./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
+./build_rmis_dna.sh <input.fasta>
+```
+### Run alignment and compare SAM output
+```sh
+# Perform alignment with BWA-MEME, add -7 option
+./bwa-mem2 mem -Y -K 100000000 -t <num_threads> -7 <input.fasta> <input_1.fastq> <input_2.fastq> -o <output_meme.sam>
+
+# To verify output with BWA-MEM2
+./bwa-mem2 mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> <input_2.fastq> -o <output_mem2.sam>
+
+# Compare output SAM files
+diff <output_mem.sam> <output_meme.sam>
+
+# To diff large SAM files use https://github.com/unhammer/diff-large-files
+
+```
+## Changing memory requirement for index in BWA-MEME 
+1. Change ```#define MODE ``` number in src/LearnedIndex_seeding.h (set 1 for 38GB index size, 2 for 88GB index size, 3 for 118GB index size)
+2. Recompile the code
+3. Run alignment
+
+## Notes
+
+* BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads), it is recommended to have 128-192 GB RAM.
+
+
+<!-- ## Citation
+
+If you use BWA-MEME, please cite the following [paper](https://biorxiv.org/cgi/content/short/):
+
+> **Youngmok Jung and Dongu Han. *BWA-MEME: BWA-MEM accelerated with a machine learning approach.*  (biorxiv).**
+
+##The source code and test scripts are available for academic use
+ -->
