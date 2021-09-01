@@ -58,7 +58,7 @@ https://ina.kaist.ac.kr/~bwa-meme/
 ./bwa-mem2 mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
 
 # Compare output SAM files
-diff <output_mem.sam> <output_meme.sam>
+diff <output_mem2.sam> <output_meme.sam>
 
 # To diff large SAM files use https://github.com/unhammer/diff-large-files
 
