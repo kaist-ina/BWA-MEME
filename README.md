@@ -81,5 +81,5 @@ If you use BWA-MEME, please cite the following [paper](https://www.biorxiv.org/c
 
 > **Youngmok Jung and Dongu Han. *BWA-MEME: BWA-MEM accelerated with a machine learning approach.*  (biorxiv).**
 
-## The source code and test scripts are available for academic use
+### The source code and test scripts are available for academic use
 
