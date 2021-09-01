@@ -37,7 +37,7 @@ To use the RMI train code, [install Rust](https://rustup.rs/).
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
 ./build_rmis_dna.sh <input.fasta>
 
-# We provide pretrained models for human_g1k_v37.fasta please download in the link below.
+# We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
 # Two parameter files are required to run BWA-MEME
 https://ina.kaist.ac.kr/~bwa-meme/
 ```
