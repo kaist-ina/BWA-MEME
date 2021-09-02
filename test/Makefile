@@ -29,7 +29,7 @@
 ##*****************************************************************************************/
 
 
-EXE=		learned_test fmi_seeding ert_test loading_test fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read
+EXE=		fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read
 CXX=		g++
 CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw 
 CPPFLAGS=	-DENABLE_PREFETCH -DVTUNE_ANALYSIS

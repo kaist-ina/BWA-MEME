@@ -1,5 +1,11 @@
 #! /usr/bin/env bash
 
+if ! command -v cargo &> /dev/null
+then
+    echo "Command: cargo could not be found, please install cargo from https://rustup.rs/"
+    exit
+fi
+
 if [ -z "$1" ]; then
     echo "Should give input 
 ex) bash build_rmis_dna.sh ./human.fasta"
