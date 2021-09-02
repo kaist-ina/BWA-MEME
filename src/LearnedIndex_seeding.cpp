@@ -2462,11 +2462,11 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 			if (low_match == match_len && low > search_start_pos){
 				// low+=1;
 				low = search_start_pos+2;
-				// low_match = 0;
+				low_match = 0;
 			}
 			if (up_match == match_len && ((up + search_start_pos) > sa_num-1)){
 				up = sa_num+1-search_start_pos;	
-				// up_match = 0;
+				up_match = 0;
 			}
 			match_num = up+low-3;//up+low+1-4;
 			iter_pos=search_start_pos-low+2;
