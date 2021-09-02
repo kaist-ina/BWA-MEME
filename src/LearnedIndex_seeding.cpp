@@ -138,7 +138,7 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 
 		}
 		bit_shift = ffs(num_model)-1;
-		fprintf(stderr,"[Learned-Config] MODE:%d SEARCH_METHOD: %d MEM_TRADEOFF:%d EXPONENTIAL_SMEMSEARCH: %d DEBUG_MODE:%d Num 2nd Models:%ld PWL Bits Used:%ld\n", PREFETCH, CURR_SEARCH_METHOD, MEM_TRADEOFF, EXPONENTIAL_SMEMSEARCH,DEBUG_MODE, num_model, bit_shift);
+		fprintf(stderr,"[Learned-Config] MODE:%d SEARCH_METHOD: %d MEM_TRADEOFF:%d EXPONENTIAL_SMEMSEARCH: %d DEBUG_MODE:%d Num 2nd Models:%ld PWL Bits Used:%ld\n", MODE, CURR_SEARCH_METHOD, MEM_TRADEOFF, EXPONENTIAL_SMEMSEARCH,DEBUG_MODE, num_model, bit_shift);
 	}
 	return true;
 }
