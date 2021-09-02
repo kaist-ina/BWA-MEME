@@ -2,6 +2,7 @@
 To evalute BWA-MEME, BWA-MEM2, and ERT.
 We provide sample run script.
 ### Compiling test code and running test scripts
+You should run make in ./BWA-MEME/ before running make in the test folder.
 ```sh
 # Compile the test code
 make -j<num_threads> learned_seeding_big_read  ert_seeding_big_read  fmi_seeding_big_read
