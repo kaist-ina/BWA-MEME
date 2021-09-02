@@ -77,7 +77,8 @@ diff <output_mem2.sam> <output_meme.sam>
 
 ## Citation
 
-If you use BWA-MEME, please cite the following [paper](https://www.biorxiv.org/content/10.1101/2021.09.01.457579v1){:target="_blank"}:
+If you use BWA-MEME, please cite the following <a href="https://www.biorxiv.org/content/10.1101/2021.09.01.457579v1" target="_blank">paper link</a>
+<!-- [paper](https://www.biorxiv.org/content/10.1101/2021.09.01.457579v1){:target="_blank"}: -->
 
 > **Youngmok Jung and Dongu Han. *BWA-MEME: BWA-MEM accelerated with a machine learning approach.*  (biorxiv).**
 
