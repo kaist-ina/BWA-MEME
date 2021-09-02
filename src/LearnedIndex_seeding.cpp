@@ -2421,13 +2421,13 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 
 		while(1){
 			while (1){
-				if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)+(low==1)) >= min_intv_value){
-	#if Count_mem_ref
-					fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
-	#endif
-					*exact_match_len = match_len;
-					return iter_pos;
-				}
+// 				if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)+(low==1)) >= min_intv_value){
+// 	#if Count_mem_ref
+// 					fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+// 	#endif
+// 					*exact_match_len = match_len;
+// 					return iter_pos;
+// 				}
 
 				if (low_match >= match_len && low <= search_start_pos){
 	#if Count_mem_ref
@@ -2451,7 +2451,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 				else{
 					break;
 				}
-				if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)) >= min_intv_value){
+				if (match_len < raux->min_seed_len &&  (up+low-3) >= min_intv_value){
 	#if Count_mem_ref
 					fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
 	#endif
