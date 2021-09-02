@@ -75,7 +75,7 @@ extern "C" {
 
 // No need to change below
 #define PREFETCH 1
-#define EXPONENTIAL_SMEMSEARCH 1
+#define EXPONENTIAL_SMEMSEARCH 0
 #define EXPONENTIAL_EXP_START 5
 #define EXPONENTIAL_EXP_POW 1
 #define MEM_TRADEOFF_CACHED 1
