@@ -2249,14 +2249,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 						return iter_pos;
 					}
 			}
-			if (low_match >= match_len && low >= search_start_pos){
-				low = search_start_pos;
-				// low_match = 0;
-			}
-			if (up_match >= match_len && ((up + search_start_pos) >= sa_num-1)){
-				up = sa_num-1-search_start_pos;	
-				// up_match = 0;
-			}
+			
 
 			#if CURR_SEARCH_METHOD != 2
 			uint64_t exp_search_move = EXPONENTIAL_EXP_START;
@@ -2404,6 +2397,14 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 
 			}
 
+			if (low_match >= match_len && low >= search_start_pos){
+				low = search_start_pos+1;
+				low_match = 0;
+			}
+			if (up_match >= match_len && ((up + search_start_pos) >= sa_num-1)){
+				up = sa_num-search_start_pos;	
+				up_match = 0;
+			}
 			
 			match_num = up+low-1;
 			iter_pos=search_start_pos-low+1;
@@ -3749,6 +3750,14 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 	uint64_t up=1, low=1;
 	while(1){
 		while (1){
+			if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)+(low==1)) >= min_intv_value){
+	#if Count_mem_ref
+				fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+	#endif
+				*exact_match_len = match_len;
+				return iter_pos;
+			}
+
 			if (low_match >= match_len && low <= search_start_pos){
 #if Count_mem_ref
 				count_search_min_intv++;
@@ -3757,13 +3766,13 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 
 
 				low++;
-				if (match_len < raux->min_seed_len &&  up+low-3 >= min_intv_value){
-#if Count_mem_ref
-					fprintf(stdout,"[smem_search_linear func - right]\tMax match ref len:%d Count Total: %d Count_exp:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv+count_search_exp,count_search_exp, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
-#endif
-					*exact_match_len = match_len;
-					return iter_pos;
-				}
+// 				if (match_len < raux->min_seed_len &&  up+low-3 >= min_intv_value){
+// #if Count_mem_ref
+// 					fprintf(stdout,"[smem_search_linear func - right]\tMax match ref len:%d Count Total: %d Count_exp:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv+count_search_exp,count_search_exp, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+// #endif
+// 					*exact_match_len = match_len;
+// 					return iter_pos;
+// 				}
 			}
 			else if(up_match >= match_len &&  sa_num-1 >= up + search_start_pos){
 #if Count_mem_ref
@@ -3772,24 +3781,26 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
 
 				up++;
-				if (match_len < raux->min_seed_len &&  up+low-3 >= min_intv_value){
-#if Count_mem_ref
-					fprintf(stdout,"[smem_search_linear func - right]\tMax match ref len:%d Count Total: %d Count_exp:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv+count_search_exp,count_search_exp, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
-#endif
-					*exact_match_len = match_len;
-					return iter_pos;
-				}
+				
 			}
 			else{
 				break;
 			}
+			if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)) >= min_intv_value){
+	#if Count_mem_ref
+				fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+#endif
+				*exact_match_len = match_len;
+				return iter_pos;
+			}
 		}
 		if (low_match == match_len && low > search_start_pos){
-			low+=1;
+			// low+=1;
+			low = search_start_pos+2;
 			low_match = 0;
 		}
 		if (up_match == match_len && ((up + search_start_pos) > sa_num-1)){
-			up +=1;	
+			up = sa_num+1-search_start_pos;	
 			up_match = 0;
 		}
 		match_num = up+low-3;//up+low+1-4;
