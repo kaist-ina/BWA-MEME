@@ -80,5 +80,5 @@ diff <output_mem2.sam> <output_meme.sam>
 If you use BWA-MEME, please cite the following [paper](https://www.biorxiv.org/content/10.1101/2021.09.01.457579v1)
 > **Youngmok Jung and Dongu Han. *BWA-MEME: BWA-MEM accelerated with a machine learning approach.*  (biorxiv).**
 
-### The source code and test scripts are available for academic use
+
 
