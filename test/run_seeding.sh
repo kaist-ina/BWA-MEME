@@ -56,10 +56,10 @@ for f in ${filelist};do
     #FMI
     echo "" >results/fmi_seeding_result_$f.log
     echo "" >results/fmi_seeding_exp_$f.log
-    #numactl -m 1 -C 24 ./fmi_seeding_big_read   ~/human_ref/human_g1k_v37.fasta  /ssd/$f 100 1 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
-    #numactl -m 1 -C 24-31 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 100 8 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
-    #numactl -m 1 -C 24-39 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 100 16 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
-    numactl -m 1 -C 24-47 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 100 24 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
-    numactl -m 1 -C 24-47,72-95 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 100 48 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
+    #numactl -m 1 -C 24 ./fmi_seeding_big_read   ~/human_ref/human_g1k_v37.fasta  /ssd/$f 5000 1 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
+    #numactl -m 1 -C 24-31 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 5000 8 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
+    #numactl -m 1 -C 24-39 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 5000 16 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
+    numactl -m 1 -C 24-47 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 5000 24 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
+    numactl -m 1 -C 24-47,72-95 ./fmi_seeding_big_read ~/human_ref/human_g1k_v37.fasta  /ssd/$f 5000 48 3 2>> results/fmi_seeding_exp_$f.log >> results/fmi_seeding_result_$f.log
     
 done;
