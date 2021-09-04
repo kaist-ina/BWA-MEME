@@ -1,7 +1,7 @@
                            The MIT License
 
-   BWA-MEM2  (Sequence alignment using Burrows-Wheeler Transform),
-   Copyright (C) 2019 Intel Corporation, Heng Li.
+   BWA-MEME  (Sequence alignment using Learned Indices),
+   Copyright (C) 2021 Youngmok Jung and Dongsu Han.
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
@@ -22,6 +22,5 @@
    ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
-
-Contacts: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@intel.com>;
-                                Heng Li <hli@jimmy.harvard.edu>
+   
+Contacts: Youngmok Jung <tom418@kaist.ac.kr>; Dongsu Han <dhan.ee@kaist.ac.kr>;
