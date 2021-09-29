@@ -25,63 +25,27 @@ extern "C" {
 #  define fls(x) __builtin_clzll(x)
 #endif
 
-
-
-
+double SA_NUM;
+char* L1_PARAMETERS;
+char* L2_PARAMETERS;
 int64_t query_k_mer = 32; // fix this to 32, use front 32 character for Learned Index model inference
-
 uint8_t sa_raux_buf[4][4]= {
 	{0,3,2,1},
 	{1,0,3,2},
 	{2,1,0,3},
 	{3,2,1,0}
 } ;
-
-
-
 #define _get_pac(pac, l) ((pac)[(l)>>2]>>((~(l)&3)<<1)&3)
 
-
-bool check_exact_match(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false) {
-	/*
-		Perform in zigzag style
-	*/
-	uint64_t key;
-    uint64_t err ;
-    uint64_t position ;
-	uint32_t exact_match_len ;
-	int64_t suffix_array_num = iaux->bns->l_pac*2;
-	uint32_t ambiguous_pos;
-	// Right extension from pivot, save next raux->pivot
-	// - 1. Make uint64_t Key starting from pivot point
-	bool right_forward= true;
-	key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
-	position = learned_index_lookup(key ,&err);
-	position = mem_search(iaux->ref_string, iaux->sa_pos,iaux->pac, suffix_array_num, 
-					    	raux, position, err, right_forward, &exact_match_len,&ambiguous_pos);
-	return exact_match_len == raux->l_seq;
-}
 
 inline void set_forward_pivot(Learned_read_aux_t* raux, int pivot){
 	raux->pivot = pivot;
 	raux->l_pivot = raux->l_seq-1 - raux->pivot;
 }
-// disable this in pwl,linear model
-// double L0_PARAMETER0 = 2015651.7759373263; // 3 layer rmi 
-// double L0_PARAMETER1 = 0.0000000000023861004018415083;// 3 layer rmi 
 
-double L0_PARAMETER0 = 11261261.703954473; // 2 layer rmi 
-double L0_PARAMETER1 = 0.00000000001333096204967189;// 2 layer rmi 
-
-double SA_NUM;
-char* L1_PARAMETERS;
-char* L2_PARAMETERS;
 
 bool learned_index_load(char const* dataPath, char const* dataPath2, char const* dataPath3, double suffix_array_num) {
 	{
-		// if second layer number change from 67108863  should change 67108863 in lookup function 
-		
-		
 		SA_NUM=suffix_array_num;
 		uint64_t model_size = 0;
 		uint64_t num_model,bit_shift;
@@ -132,8 +96,6 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 				return false;
 			}
 			num_model = std::max(model_size/24, num_model); // number of model
-			// bit_shift = ffs(num_model)-1;
-			// infile.read((char*)L2_PARAMETERS, 246600336);
 			infile.read((char*)L2_PARAMETERS, model_size);
 
 		}
@@ -234,8 +196,6 @@ inline bool compare_read_and_ref_binary_LOADSUFFIX(const uint8_t* pac, const uin
 	uint64_t ref_len=sa_num - sa_pos;
 	uint64_t compare; 
 	uint32_t read_len= (uint32_t)std::min(ref_len, valid_len);
-	// uint32_t sa_pos_share = sa_pos>>2;
-	// uint32_t sa_pos_rest = sa_pos&3;
 	
 	uint8_t* read_string ;
 
@@ -417,7 +377,6 @@ inline bool compare_read_and_ref_binary_left_LOADSUFFIX(const uint8_t* pac, cons
 				return (ref_val << (62-(compare_len<<1))) < (read_val << (62-(compare_len<<1)));
 			}
 		}
-
 	}
 	*match_len = read_len;	
 	if (read_len<ref_len){ // if read_len == valid_len
@@ -465,12 +424,12 @@ inline bool compare_read_and_ref_binary_pos_only(const uint8_t* pac, const uint8
 	uint32_t compare_len;
 	compare = ref_val^read_val;
 	compare = compare >> (sa_pos_rest<<1);
-	if(__builtin_expect_with_probability(compare != 0, 1, 0.8) ){
+	if( compare != 0 ){
 		compare_len = ((ffs(compare)-1)>>1);
 		if (read_len <= compare_len){
 			*match_len = read_len;	
 			// if ( read_len<ref_len ){ 
-			if ( __builtin_expect(read_len<ref_len, 1) ){ 
+			if ( read_len<ref_len ){ 
 				*exact_match_flag= true;
 				return true;
 			}else{
@@ -479,25 +438,11 @@ inline bool compare_read_and_ref_binary_pos_only(const uint8_t* pac, const uint8
 				return false;
 			}
 		}else{
-			
 			*match_len = compare_len;
 			compare_len += sa_pos_rest;
 			return (ref_val << (62-(compare_len<<1))) < (read_val << (62-(compare_len<<1)));
-
-			// uint64_t mask = 3 << (compare_len<<1);
-			// return (ref_val & mask) < (read_val & mask);
-
-			// compare_len = ffs(compare)-1 + (sa_pos_rest<<1);
-			// if ( (compare_len>>3) >= 8){
-			// 	std::cout << "FFS:"<<ffs(compare)-1 <<" Sa_pos_rest:"<< sa_pos_rest <<"\n";
-			// 	assert(0);
-			// }
-			// ref_pos read_string have sa_pos_rest bits which should be ignored, requires additional operation
-			// uint8_t ref = *(ref_pos+(compare_len>>3)), read = *(read_string+(compare_len>>3));
-			// return BitReverseTable256[ref] < BitReverseTable256[read];
 		}
 	}
-
 	for (uint64_t i=8; (i<<2) <read_len+sa_pos_rest ; i +=8){
 		ref_val = (*(uint64_t*)(ref_pos+i)) ;
 		read_val = (*(uint64_t*)(read_string+i)) ;
@@ -506,7 +451,7 @@ inline bool compare_read_and_ref_binary_pos_only(const uint8_t* pac, const uint8
 			compare_len = (i<<2)+ ((ffs(compare)-1)>>1) - sa_pos_rest;
 			if (read_len <= compare_len){
 				*match_len = read_len;	
-				if (__builtin_expect(read_len<ref_len, 1)){ // if read_len == valid_len
+				if (read_len<ref_len){ // if read_len == valid_len
 					*exact_match_flag= true;
 					return true;
 				}else{
@@ -522,7 +467,7 @@ inline bool compare_read_and_ref_binary_pos_only(const uint8_t* pac, const uint8
 		}
 	}
 	*match_len = read_len;	
-	if (__builtin_expect(read_len<ref_len, 1)){ // if read_len == valid_len
+	if (read_len<ref_len){ // if read_len == valid_len
 		*exact_match_flag= true;
 		return true;
 	}else{
@@ -562,11 +507,11 @@ inline bool compare_read_and_ref_binary_left_pos_only(const uint8_t* pac, const 
 	uint32_t compare_len;
 	compare = ref_val^read_val;
 	compare = compare >> (sa_pos_rest<<1);
-	if(__builtin_expect_with_probability(compare != 0, 1, 0.8)  ){
+	if(compare != 0 ){
 		compare_len = ((ffs(compare)-1)>>1);
 		if (read_len <= compare_len){
 			*match_len = read_len;	
-			if (__builtin_expect(read_len<ref_len, 1)){ // if read_len == valid_len
+			if (read_len<ref_len){ // if read_len == valid_len
 				*exact_match_flag= true;
 				return true;
 			}else{
@@ -589,7 +534,7 @@ inline bool compare_read_and_ref_binary_left_pos_only(const uint8_t* pac, const 
 			compare_len = (i<<2)+ ((ffs(compare)-1)>>1) - sa_pos_rest;
 			if (read_len <= compare_len){
 				*match_len = read_len;	
-				if (__builtin_expect(read_len<ref_len, 1)){ // if read_len == valid_len
+				if (read_len<ref_len){ // if read_len == valid_len
 					*exact_match_flag= true;
 					return true;
 				}else{
@@ -606,7 +551,7 @@ inline bool compare_read_and_ref_binary_left_pos_only(const uint8_t* pac, const 
 
 	}
 	*match_len = read_len;	
-	if (__builtin_expect(read_len<ref_len, 1)){ // if read_len == valid_len
+	if (read_len<ref_len){ // if read_len == valid_len
 		*exact_match_flag= true;
 		return true;
 	}else{
@@ -615,7 +560,6 @@ inline bool compare_read_and_ref_binary_left_pos_only(const uint8_t* pac, const 
 		return false;
 	}
 }
-
 
 #if LOADSUFFIX
 	#define compare_read_and_ref_binary(pac, sa_pos, iter_pos, raux, sa_num, read_valid_len, match_len, exact_match_flag) compare_read_and_ref_binary_LOADSUFFIX(pac, sa_pos, iter_pos*SASIZE, raux, sa_num, read_valid_len, match_len, exact_match_flag) 
@@ -948,7 +892,6 @@ void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 			}
 			set_forward_pivot(raux, (qbeg + qend) >> 1);
 			raux->min_intv_limit = smems->a[k].hitcount+1;
-			// if ( smems->a[k].hitcount == 1 ){
 			if ( smems->a[k].hitcount >= 1 && smems->a[k].hitcount < 10 ){
 				raux->cache_pivot_end = smems->a[k].end;
 				raux->cache_pivot = smems->a[k].start;
@@ -986,10 +929,7 @@ void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 		}
 #endif
 	}
-
-
 }
-
 
 void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN){
 		set_forward_pivot(raux, 0);
@@ -2415,11 +2355,6 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 		}//end while 1
 #else
 		uint64_t up=1, low=1;
-		// up=1, low=1;
-		// match_len =last_match_len;
-		// iter_pos = search_start_pos;
-		// up_match=match_len, low_match=match_len, match_num=1;
-
 		while(1){
 			while (1){
 				if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)+(low==1)) >= min_intv_value){
@@ -3555,19 +3490,21 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 	uint32_t match_len;
 	uint32_t last_match_len;
 	uint64_t exp_search_move=MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+	uint64_t upper_b,lower_b,n,middle, half;
 #if Count_mem_ref
 	uint32_t count_search_exp=0;
 	uint32_t count_search_bs=0;
 	uint32_t count_search_linear=0;
 	uint32_t count_search_min_intv=0;
 	uint32_t count_smem=0;
+	
 #endif
 
 	if (no_search){
 		match_len = read_valid_len;
 	}else{
 		// do exponential search
-		uint64_t upper_b,lower_b,n,middle, half;
+		
 		
 #if Count_mem_ref
 		count_search_exp++;
@@ -3747,13 +3684,229 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 	uint64_t search_start_pos = iter_pos;
 	uint32_t up_match=match_len, low_match=match_len, match_num=1;
 	// when need to find smems, should count number of matches
+#if EXPONENTIAL_SMEMSEARCH
+	uint64_t up=0, low=0;
+	while(1){
+		while ( up+low < 15){
+				if ( match_len < raux->min_seed_len && (up+low+ (up==0)+(low==0)-1 ) >= min_intv_value){
+					#if Count_mem_ref
+					fprintf(stdout,"[smem_search func - right e-lin]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+					#endif
+					*exact_match_len = match_len;
+					return iter_pos;
+				}
+				if (low_match >= match_len && low+1 <= search_start_pos){
+					#if Count_mem_ref
+					count_search_min_intv++;
+					#endif
+					low++;
+					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
+
+					// if (low_match < match_len){
+					// 	low--;
+					// }
+
+				}
+				else if(up_match >= match_len &&  sa_num-2 >= up + search_start_pos){
+					#if Count_mem_ref
+					count_search_min_intv++;
+					#endif			
+					up++;
+					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
+					
+					// if (up_match < match_len){
+					// 	up--;
+					// }
+				}
+				else{
+					break;
+				}
+
+				if ( match_len < raux->min_seed_len && (up+low+(up==0)-1) >= min_intv_value){
+					#if Count_mem_ref
+					fprintf(stdout,"[smem_search func - right e-lin]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+					#endif
+					*exact_match_len = match_len;
+					return iter_pos;
+				}
+		}
+		
+
+		#if CURR_SEARCH_METHOD != 2
+		uint64_t exp_search_move = EXPONENTIAL_EXP_START;
+		#else
+		exp_search_move = EXPONENTIAL_EXP_START;
+		#endif
+		
+		if (low_match >= match_len && low < search_start_pos){
+			//exponential search
+			upper_b = search_start_pos-low;
+			exp_search_move = std::min(search_start_pos-low, exp_search_move);
+			lower_b = search_start_pos-low-exp_search_move;
+			n=  upper_b-lower_b + 1;
+			// printf("[Low-exp] Up_b:%lld Low_b:%lld\n",upper_b, lower_b);
+			while (low_match >= match_len){
+				#if Count_mem_ref
+				count_search_min_intv++;
+				#endif
+				compare_read_and_ref_binary(pac, sa_pos, lower_b, raux, sa_num,match_len, &low_match,&exact_match_flag);
+				if (low_match < match_len ){
+					// found different position
+					break;
+				}
+				if (lower_b == 0){
+					break;
+				}
+				exp_search_move <<= EXPONENTIAL_EXP_POW;
+				exp_search_move = std::min(exp_search_move,lower_b);
+				lower_b -= exp_search_move;
+				
+				upper_b = lower_b + exp_search_move;
+				n=  upper_b-lower_b + 1;
+			}
+			// printf("[Low]Upper_b: %lld Lower_b:%lld n:%lld\n",upper_b,lower_b,n);
+			//binary search 
+			while (uint64_t half = (n>>1)) {
+				if (match_len < raux->min_seed_len &&  up+search_start_pos-upper_b >= min_intv_value){
+					#if Count_mem_ref
+					fprintf(stdout,"[smem_search func - right e-exp]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+					#endif
+					*exact_match_len = match_len;
+					return iter_pos;
+				}
+				middle = upper_b - half;
+				// middle = lower_b + half;
+				#if Count_mem_ref
+					count_search_min_intv++;
+				#endif
+				#if PREFETCH
+				_mm_prefetch(sa_pos+(middle-half/2)*SASIZE, _MM_HINT_T0);
+				_mm_prefetch(sa_pos+((upper_b-half/2)*SASIZE), _MM_HINT_T0);
+				#endif
+				
+				compare_read_and_ref_binary(pac, sa_pos, middle , raux, sa_num,match_len, &low_match,&exact_match_flag);
+				// printf("[BIN]n:%lld middle: %lld lower_b: %lld match_len: %lld low_match: %lld\n",n, middle, lower_b, match_len, low_match);
+				if (low_match >= match_len){
+					upper_b = middle;
+					if (upper_b !=0 && n<3){
+						//update low_match to the next biggest exact match length
+						#if Count_mem_ref
+							count_search_min_intv++;
+						#endif
+						compare_read_and_ref_binary(pac, sa_pos, (upper_b-1) , raux, sa_num,match_len, &low_match,&exact_match_flag);
+					}
+				}
+				n -= half;
+			}
+			low = search_start_pos+1 - upper_b ;
+			if (match_len < raux->min_seed_len &&  up+low-1 >= min_intv_value){
+				#if Count_mem_ref
+					fprintf(stdout,"[smem_search func - right e-exp]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+				#endif
+				*exact_match_len = match_len;
+				return iter_pos;
+			}
+		}
+
+		if(up_match >= match_len && sa_num-1 > up + search_start_pos){
+			// find Up
+			exp_search_move = EXPONENTIAL_EXP_START;
+			//exponential search
+			lower_b = search_start_pos+up;
+			exp_search_move = std::min(sa_num-1-lower_b, exp_search_move);
+			upper_b = lower_b+exp_search_move;
+			n=  upper_b-lower_b + 1;
+			// printf("[Up-exp] Up_b:%lld Low_b:%lld\n",upper_b, lower_b);
+			while (up_match >= match_len){
+				#if Count_mem_ref
+				count_search_min_intv++;
+				#endif
+				compare_read_and_ref_binary(pac, sa_pos, upper_b, raux, sa_num,match_len, &up_match,&exact_match_flag);
+				if (up_match < match_len){
+					// found different position
+					break;
+				}
+				if (upper_b == sa_num-1){
+					break;
+				}
+				exp_search_move <<= EXPONENTIAL_EXP_POW;
+				exp_search_move = std::min(exp_search_move,sa_num-1-upper_b);
+				upper_b += exp_search_move;
+				lower_b = upper_b-exp_search_move;
+				n=  upper_b-lower_b + 1;
+			}
+			// printf("[Up]Upper_b: %lld Lower_b:%lld n:%lld\n",upper_b,lower_b,n);
+			//binary search 
+			while (uint64_t half = (n>>1)) {
+				if (match_len < raux->min_seed_len &&  lower_b-search_start_pos+low >= min_intv_value){
+					#if Count_mem_ref
+						fprintf(stdout,"[smem_search func - right e-exp]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+					#endif
+					*exact_match_len = match_len;
+					return iter_pos;
+				}
+				middle = lower_b + half;
+				#if Count_mem_ref
+					count_search_min_intv++;
+				#endif
+				#if PREFETCH
+				_mm_prefetch(sa_pos+(middle+half/2)*SASIZE, _MM_HINT_T0);
+				_mm_prefetch(sa_pos+((lower_b+half/2)*SASIZE), _MM_HINT_T0);
+				#endif
+				compare_read_and_ref_binary(pac, sa_pos, middle, raux, sa_num,match_len, &up_match,&exact_match_flag);
+				if (up_match >= match_len){
+					lower_b = middle;
+					if(lower_b != sa_num-1 && n<3){
+						#if Count_mem_ref
+							count_search_min_intv++;
+						#endif
+						compare_read_and_ref_binary(pac, sa_pos, (lower_b+1), raux, sa_num,match_len, &up_match,&exact_match_flag);
+					}
+				}
+				
+				n -= half;
+			}
+			up = lower_b+1 - search_start_pos;
+
+			if (match_len < raux->min_seed_len &&  up+low-1 >= min_intv_value){
+				#if Count_mem_ref
+					fprintf(stdout,"[smem_search func - right e-exp]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
+				#endif
+				*exact_match_len = match_len;
+				return iter_pos;
+			}
+
+		}
+
+		if (low_match >= match_len && low >= search_start_pos){
+			low = search_start_pos+1;
+			low_match = 0;
+		}
+		if (up_match >= match_len && ((up + search_start_pos) >= sa_num-1)){
+			up = sa_num-search_start_pos;	
+			up_match = 0;
+		}
+		
+		match_num = up+low-1;
+		iter_pos=search_start_pos-low+1;
+		if (  match_num >= min_intv_value){
+				break;
+		}
+		match_len = up_match > low_match? up_match: low_match;
+	}//end while 1
+#else
 	uint64_t up=1, low=1;
+	// up=1, low=1;
+	// match_len =last_match_len;
+	// iter_pos = search_start_pos;
+	// up_match=match_len, low_match=match_len, match_num=1;
+
 	while(1){
 		while (1){
 			if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)+(low==1)) >= min_intv_value){
-	#if Count_mem_ref
+#if Count_mem_ref
 				fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
-	#endif
+#endif
 				*exact_match_len = match_len;
 				return iter_pos;
 			}
@@ -3762,17 +3915,11 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 #if Count_mem_ref
 				count_search_min_intv++;
 #endif
-				compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low) , raux, sa_num,match_len, &low_match,&exact_match_flag);
+				compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
 
 
 				low++;
-// 				if (match_len < raux->min_seed_len &&  up+low-3 >= min_intv_value){
-// #if Count_mem_ref
-// 					fprintf(stdout,"[smem_search_linear func - right]\tMax match ref len:%d Count Total: %d Count_exp:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv+count_search_exp,count_search_exp, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
-// #endif
-// 					*exact_match_len = match_len;
-// 					return iter_pos;
-// 				}
+				
 			}
 			else if(up_match >= match_len &&  sa_num-1 >= up + search_start_pos){
 #if Count_mem_ref
@@ -3787,7 +3934,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				break;
 			}
 			if (match_len < raux->min_seed_len &&  (up+low-3+(up==1)) >= min_intv_value){
-	#if Count_mem_ref
+#if Count_mem_ref
 				fprintf(stdout,"[smem_search func - right]\tMax match ref len:%d Count Total: %d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
 #endif
 				*exact_match_len = match_len;
@@ -3810,6 +3957,9 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 		}
 		match_len = up_match > low_match? up_match: low_match;
 	}//end while 1
+	// printf("[ORi]up: %lld low: %lld\n",up, low);
+	// printf("[ORi]match_num: %lld match_len: %lld up_match: %lld low_match: %lld\n",match_num, match_len, up_match, low_match);
+#endif
 	*exact_match_len = match_len;
 	// add found smems to smems and hits array
 #if REMOVE_DUP_SEED	
