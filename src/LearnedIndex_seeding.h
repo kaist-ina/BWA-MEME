@@ -210,7 +210,6 @@ extern uint8_t sa_raux_buf[4][4];
 
 inline uint64_t Tokenization( Learned_read_aux_t* raux, bool right_forward, uint32_t* ambiguous_pos, bool hasN);
 
-bool check_exact_match(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false);
 
 // namespace learned_index {
 bool learned_index_load(char const* dataPath, char const* dataPath2,char const* dataPath3, double suffix_array_num);
