@@ -4,7 +4,7 @@
 #include <math.h>
 #include <cmath>
 #include <fstream>
-#include <filesystem>
+// #include <filesystem>
 #include <iostream>
 
 #ifdef __cplusplus
@@ -61,8 +61,7 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 		// 	infile.read((char*)&L0_PARAMETER1, 8);
 		// }
 		{
-
-			std::ifstream infile(std::filesystem::path(dataPath2), std::ios::in | std::ios::binary);
+			std::ifstream infile(dataPath2, std::ios::in | std::ios::binary);
 			if (!infile.good()) {
 				fprintf(stderr, "[indexload]Can't open learned-index model, read_path: %s\n.", dataPath2);
 				return false;
@@ -81,7 +80,7 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 		}
 
 		{
-			std::ifstream infile(std::filesystem::path(dataPath3), std::ios::in | std::ios::binary);
+			std::ifstream infile(dataPath3, std::ios::in | std::ios::binary);
 			if (!infile.good()) {
 				fprintf(stderr, "Can't open learned-index model, read_path: %s\n.", dataPath3);
 				return false;
