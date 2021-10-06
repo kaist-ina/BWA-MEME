@@ -1,3 +1,28 @@
+/*
+ * The MIT License
+ *
+ * Copyright (C) 2021  Youngmok Jung, Dongsu Han.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ * Authors: Youngmok Jung <tom418@kaist.ac.kr>; Dongsu Han <dhan.ee@kaist.ac.kr>;
+ */
+
 #include "LearnedIndex_seeding.h"
 #include "memcpy_bwamem.h"
 
@@ -28,7 +53,7 @@ extern "C" {
 double SA_NUM;
 char* L1_PARAMETERS;
 char* L2_PARAMETERS;
-int64_t query_k_mer = 32; // fix this to 32, use front 32 character for Learned Index model inference
+// sa_raux_buf is used to select properly aligned read among unpacked_queue_binary_buf_shift*
 uint8_t sa_raux_buf[4][4]= {
 	{0,3,2,1},
 	{1,0,3,2},
@@ -37,7 +62,7 @@ uint8_t sa_raux_buf[4][4]= {
 } ;
 #define _get_pac(pac, l) ((pac)[(l)>>2]>>((~(l)&3)<<1)&3)
 
-
+// Used to set pivot point in the read
 inline void set_forward_pivot(Learned_read_aux_t* raux, int pivot){
 	raux->pivot = pivot;
 	raux->l_pivot = raux->l_seq-1 - raux->pivot;
@@ -49,17 +74,7 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 		SA_NUM=suffix_array_num;
 		uint64_t model_size = 0;
 		uint64_t num_model,bit_shift;
-		// disable this in pwl,linear model
-		// {
-		// 	std::ifstream infile(std::filesystem::path(dataPath) , std::ios::in | std::ios::binary);
-		// 	if (!infile.good()) {
-		// 		fprintf(stderr, "Can't open learned-index model, read_path: %s\n.", dataPath);
-		// 		return false;
-		// 	}
-		// 	infile.read((char*)&L0_PARAMETER0, 8);
-		// 	fprintf(stderr,"L0 loaded: %d \n",L0_PARAMETER0);
-		// 	infile.read((char*)&L0_PARAMETER1, 8);
-		// }
+		
 		{
 			std::ifstream infile(dataPath2, std::ios::in | std::ios::binary);
 			if (!infile.good()) {
@@ -122,6 +137,9 @@ inline size_t FCLAMP(double inp, double bound) {
 	return (inp > bound ? bound : (size_t)inp);
 }
 
+/*
+* Example of lookup function for naive 2-layer RMI
+*/
 inline uint64_t learned_index_lookup_2rmi(uint64_t key, size_t* err) { // 2 layer RMI pwl,linear
 	size_t modelIndex;
 	double fpred;
@@ -138,6 +156,9 @@ inline uint64_t learned_index_lookup_2rmi(uint64_t key, size_t* err) { // 2 laye
 	return FCLAMP(fpred, SA_NUM - 1.0);
 }
 
+/*
+* Example of lookup function for naive 3-layer RMI
+*/
 inline uint64_t learned_index_lookup_3rmi(uint64_t key, size_t* err) { // 3 layer RMI linear,linear,linear_spline
 	size_t modelIndex;
 	double fpred;
@@ -183,6 +204,18 @@ inline uint64_t learned_index_lookup(uint64_t key, size_t* err) { //p-rmi
 	return FCLAMP(fpred, SA_NUM - 1.0);
 }
 
+/*
+* About compare_read_and_ref_binary function
+* @Param pac: 2-bit encoded reference DNA sequence
+* @Param sa: Suffix array of reference DNA sequence
+* @Param pos: Position in suffix array
+* @Param raux: read data
+* @Param sa_num: number of suffix array, should check boundary condition (sa_num - sa_pos)
+* @Param valid_len: length to perform exact_match between suffix and read
+* @Param match_len: store the length of exact match in this variable
+* @Param exact_match_flag: set to true if read and suffix have full-exact-match
+*/
+
 inline bool compare_read_and_ref_binary_LOADSUFFIX(const uint8_t* pac, const uint8_t* sa,const uint64_t pos, const Learned_read_aux_t* raux, const uint64_t sa_num, const uint64_t valid_len,  uint32_t* match_len, bool* exact_match_flag){
 	/*
 		ref -> [(A T G C) C C G T] 	4 base in 8-bit
@@ -192,9 +225,9 @@ inline bool compare_read_and_ref_binary_LOADSUFFIX(const uint8_t* pac, const uin
 
 	uint64_t sa_pos = *(uint32_t*)(sa + pos);
 	sa_pos = sa_pos <<8 |  sa[pos+4];
-	uint64_t ref_len=sa_num - sa_pos;
+	uint64_t ref_len = sa_num - sa_pos;
 	uint64_t compare; 
-	uint32_t read_len= (uint32_t)std::min(ref_len, valid_len);
+	uint32_t read_len = (uint32_t)std::min(ref_len, valid_len);
 	
 	uint8_t* read_string ;
 
@@ -891,6 +924,7 @@ void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 			}
 			set_forward_pivot(raux, (qbeg + qend) >> 1);
 			raux->min_intv_limit = smems->a[k].hitcount+1;
+			// heuristic configuration to reuse cached position (Inverse Suffix Array)
 			if ( smems->a[k].hitcount >= 1 && smems->a[k].hitcount < 10 ){
 				raux->cache_pivot_end = smems->a[k].end;
 				raux->cache_pivot = smems->a[k].start;
@@ -933,7 +967,6 @@ void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN){
 		set_forward_pivot(raux, 0);
 		// loop until raux->pivot reaches end of read
-		// bwaseedstrategy is finding shortest exact match len, satisfing min_seed_len and max_intv_ar
 		int min_intv_value = raux->min_intv_limit;
 		uint8_t* ref_string = iaux->ref_string;
 		uint8_t* sa_pos = iaux->sa_pos;
@@ -977,15 +1010,13 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
     #if CURR_SEARCH_METHOD == 2
 			uint64_t exp_search_move=MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
 			// do exponential search
-			uint64_t upper_b,lower_b,n,middle, half;
+			uint64_t upper_b,lower_b,n,middle, half; // variables for binary search
 			iter_pos = iter_pos > MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
 			iter_pos = iter_pos < sa_num-1 - MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:sa_num - 1-MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
 	#if Count_mem_ref
 			// count_search_exp++;
 			count_search_bs++;
 	#endif	
-			// std::cout <<"[smemtradeoff] Exp search start\n";
-			// std::cout <<"iter_pos:"<<iter_pos<<"\n";
 			if (!compare_read_and_ref_binary(iaux->pac, sa_pos, iter_pos, raux, sa_num,read_valid_len, &match_len,&exact_match_flag)){
 				if (exact_match_flag){
 					lower_b=iter_pos;
@@ -996,7 +1027,6 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 					_mm_prefetch(sa_pos+ ((iter_pos - exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
 		#endif
 		#if Count_mem_ref
-					// count_search_exp++;
 					count_search_bs++;
 		#endif
 					while (!compare_read_and_ref_binary(iaux->pac, sa_pos, iter_pos, raux, sa_num,read_valid_len, &match_len,&exact_match_flag)&& !exact_match_flag ){
@@ -1016,7 +1046,6 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 							iter_pos = 0;
 						}
 		#if Count_mem_ref
-						// count_search_exp++;
 						count_search_bs++;
 		#endif
 						
@@ -1037,13 +1066,12 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 					lower_b=iter_pos;
 					n=1;
 				}else{
-					// 1-- estimated position have smaller key than read, increase iter_pos and compare
+					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos += exp_search_move;
 		#if PREFETCH
 					_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
 		#endif				
 		#if Count_mem_ref
-					// count_search_exp++;
 					count_search_bs++;
 		#endif
 					while (compare_read_and_ref_binary(iaux->pac, sa_pos, iter_pos, raux, sa_num,read_valid_len, &match_len,&exact_match_flag)&& !exact_match_flag ){
@@ -1109,9 +1137,6 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 				}
 				n -= half;
 			}
-	// #if PREFETCH
-	// 		_mm_prefetch(sa_pos+((lower_b-16)<<1), _MM_HINT_T0);		
-	// #endif
 			// no need to do additional linear search
 			if(middle!=lower_b){
 				// lookup key was smaller than middle, should check lower_b
@@ -1130,7 +1155,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 	#endif
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+				//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 				if (last_match_len > match_len){
 					iter_pos++;
 					match_len = last_match_len;
@@ -1139,7 +1164,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 			else{
 				// lookup key was bigger than middle, should check lower_b+1
 				last_match_len = match_len;
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
 	#if Count_mem_ref
 				count_search_linear++;
@@ -1155,7 +1180,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 	#endif				
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is bigger than read or exact matches with read,
+				//  stops when ref is bigger than read or exact matches with read,
 				if (last_match_len > match_len){
 					iter_pos--;
 					match_len = last_match_len;
@@ -1229,7 +1254,6 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 			
 			if ( match_num < min_intv_value  ){
 				match_len = std::max( match_len , min_seed_len);
-				// memset_s(&mem, sizeof(mem_tl), 0);
 				mem.start = raux->pivot;
 				mem.end = raux->pivot + match_len;
 				mem.hitbeg = hits->n; // begin index in hits vector
@@ -1307,7 +1331,7 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 	#endif		
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+					//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 					if (last_match_len > match_len){
 						iter_pos++;
 						// std::cout <<"iter pos up "<< match_len <<"\n";
@@ -1316,7 +1340,7 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 				}
 				else{
 					last_match_len = match_len;
-					// 1-- estimated position have smaller key than read, increase iter_pos and compare
+					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos ++;
 	#if Count_mem_ref
 					count_search_linear++;
@@ -1331,7 +1355,7 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 	#endif		
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is bigger than read or exact matches with read,
+					//  stops when ref is bigger than read or exact matches with read,
 					if (last_match_len > match_len){
 						iter_pos--;
 						match_len = last_match_len;
@@ -1408,45 +1432,7 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 					iter_pos=search_start_pos-low+2;
 					last_iter_pos = iter_pos;
 			}//end while 1
-	#if REMOVE_DUP_SEED
-			if (raux ->max_l_seq != raux->l_seq){
-				if ( match_num < min_intv_value  ){
-					match_len = std::max( match_len , min_seed_len);
-					// memset_s(&mem, sizeof(mem_tl), 0);
-					mem.start = raux->pivot;
-					mem.end = raux->pivot + match_len;
-					mem.hitbeg = hits->n; // begin index in hits vector
-					mem.hitcount = match_num; // number of hits in reference
-					for (uint64_t i=0; i< match_num; i++){
-						uint64_t pos_val = *(uint32_t*)(sa_pos + (iter_pos+i)*SASIZE );
-						pos_val = pos_val <<8 | sa_pos[(iter_pos+i)*SASIZE + 4];
-						kv_push(uint64_t, *hits, pos_val );
-					}
-					kv_push(mem_tl, *smems, mem);
-				}
-			}
-			else{ // when full match exists
-				if (match_num > 1 && match_num < min_intv_value  ){
-					match_len = std::max( match_len , min_seed_len);
-					// memset_s(&mem, sizeof(mem_tl), 0);
-					mem.start = raux->pivot;
-					mem.end = raux->pivot + match_len;
-					mem.hitbeg = hits->n; // begin index in hits vector
-					mem.hitcount = match_num; // number of hits in reference
-					for (uint64_t i=0; i< match_num; i++){
-						if (iter_pos+i ==search_start_pos){
-							//don't add est_pos which is duplicate
-							mem.hitcount -= 1;
-							continue;
-						}
-						uint64_t pos_val = *(uint32_t*)(sa_pos + (iter_pos+i)*SASIZE );
-						pos_val = pos_val <<8 | sa_pos[(iter_pos+i)*SASIZE + 4];
-						kv_push(uint64_t, *hits, pos_val );
-					}
-					kv_push(mem_tl, *smems, mem);
-				}
-			}
-	#else
+
 			if ( match_num < min_intv_value  ){
 				match_len = std::max( match_len , min_seed_len);
 				// memset_s(&mem, sizeof(mem_tl), 0);
@@ -1461,7 +1447,6 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 				}
 				kv_push(mem_tl, *smems, mem);
 			}
-	#endif
 			
 	#if Count_mem_ref
 			fprintf(stdout,"[BWTSTRATEGY_memtradeoff_func]Max match ref len:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
@@ -1469,9 +1454,10 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 			set_forward_pivot(raux,    raux->pivot + match_len );
 		}
 }
+
 void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false) {
 	/*
-		Perform in zigzag style
+		Perform extension in zigzag style
 	*/
 	uint64_t key;
     uint64_t err ;
@@ -1483,10 +1469,9 @@ void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_re
 	int64_t suffix_array_num = iaux->bns->l_pac*2;
 	uint32_t ambiguous_pos;
 	// Right extension from pivot, save next raux->pivot
-	// - 1. Make uint64_t Key starting from pivot point
 	bool right_forward= true;
 #if MEM_TRADEOFF
-	bool no_search ;
+	bool no_search ; // when short read has full-match in reference, reuse position without search
 #endif
 	// Check pivot point whether ambiguous base appears
 	if (raux->unpacked_queue_buf[raux->pivot] >= 4){
@@ -1519,6 +1504,7 @@ void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_re
 			// Left extension from pivot, raux->pivot should be updated at every extension direction change
 #if MEM_TRADEOFF
 			right_forward = false;
+			// Make uint64_t Key starting from pivot point
 			key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
 			if (raux ->max_l_seq == raux->l_seq){
 				ss_position =  *(uint32_t*)(iaux->ref2sa+(suffix_array_num - raux->max_refpos - raux->pivot-1)*5);
@@ -1590,12 +1576,7 @@ void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_re
 	#endif
 					ss_position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
 										raux, ss_position, err, &ss_exact_match_len, smems, hits, &ambiguous_pos);
-	// #if MEM_TRADEOFF_CACHED && PREFETCH
-	// 				if (ss_exact_match_len>= raux->min_seed_len){
-	// 					_mm_prefetch( iaux->ref2sa+ iaux->sa_pos[ss_position<<1], _MM_HINT_T1 );
-	// 					_mm_prefetch( iaux->ref2sa+ suffix_array_num - iaux->sa_pos[ss_position<<1] - ss_exact_match_len-1, _MM_HINT_T1 );
-	// 				}
-	// #endif
+	
 				}
 			}
 #else
@@ -1680,7 +1661,7 @@ void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_re
 
 void Learned_getSMEMsOnePosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false) {
 	/*
-		Perform in zigzag style
+		Perform extension in zigzag style
 	*/
 	uint64_t key;
     uint64_t err ;
@@ -1692,7 +1673,7 @@ void Learned_getSMEMsOnePosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 	int64_t suffix_array_num = iaux->bns->l_pac*2;
 	uint32_t ambiguous_pos;
 	// Right extension from pivot, save next raux->pivot
-	// - 1. Make uint64_t Key starting from pivot point
+	
 	bool right_forward= true;
 #if MEM_TRADEOFF
 	bool no_search ;
@@ -1700,6 +1681,7 @@ void Learned_getSMEMsOnePosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 	// Check pivot point whether ambiguous base appears
 	if (raux->unpacked_queue_buf[raux->pivot] >= 4){
 		if (raux->l_seq - raux->pivot < raux->min_seed_len ){
+			// if the length is shorter than min_seed_len no need to search
 			set_forward_pivot(raux, raux->l_seq );
 			// set_forward_pivot(raux, raux->pivot+1 );
 		}
@@ -1708,6 +1690,7 @@ void Learned_getSMEMsOnePosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 		}
 		return;
 	}
+	// Make uint64_t Key starting from pivot point
 	key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
 	if (raux->pivot !=0 && raux->unpacked_queue_buf[raux->pivot-1] < 4){
 		// - 2. Infer Learned index and get prediction
@@ -2000,7 +1983,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 				lower_b=iter_pos;
 				n=1;
 			}else{
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos += exp_search_move;
 	#if PREFETCH
 				_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
@@ -2101,7 +2084,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 
 				last_match_len = match_len;
 			}
-			// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+			//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 			if (last_match_len > match_len){
 				iter_pos++;
 				match_len = last_match_len;
@@ -2110,7 +2093,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 		else{
 			// lookup key was bigger than middle, should check lower_b+1
 			last_match_len = match_len;
-			// 1-- estimated position have smaller key than read, increase iter_pos and compare
+			//  estimated position have smaller key than read, increase iter_pos and compare
 			iter_pos =lower_b+1;
 	#if Count_mem_ref
 			count_search_linear++;
@@ -2128,14 +2111,14 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 
 				last_match_len = match_len;
 			}
-			// 1-- stops when ref is bigger than read or exact matches with read,
+			//  stops when ref is bigger than read or exact matches with read,
 			if (last_match_len > match_len){
 				iter_pos--;
 				match_len = last_match_len;
 			}
 		}
 	}
-	// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+	//  iter_pos points to best exact matching position, match_len have the number of exact match
 	last_match_len = match_len;
 	uint64_t search_start_pos = iter_pos;
 	uint32_t up_match=match_len, low_match=match_len, match_num=1;
@@ -2538,7 +2521,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 				lower_b=iter_pos;
 				n=1;
 			}else{
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos += exp_search_move;
 	#if PREFETCH
 				_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
@@ -2637,7 +2620,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 	#endif
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+				//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 				if (last_match_len > match_len){
 					iter_pos++;
 					match_len = last_match_len;
@@ -2646,7 +2629,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 			else{
 				// lookup key was bigger than middle, should check lower_b+1
 				last_match_len = match_len;
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
 	#if Count_mem_ref
 				count_search_linear++;
@@ -2662,7 +2645,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 	#endif
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is bigger than read or exact matches with read,
+				//  stops when ref is bigger than read or exact matches with read,
 				if (last_match_len > match_len){
 					iter_pos--;
 					match_len = last_match_len;
@@ -2672,7 +2655,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 	#if PREFETCH
 		_mm_prefetch(sa_pos+((iter_pos-16)*SASIZE), _MM_HINT_T0);		
 	#endif
-		// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+		//  iter_pos points to best exact matching position, match_len have the number of exact match
 		uint64_t search_start_pos = iter_pos;
 		uint32_t up_match=match_len, low_match=match_len, match_num=1;
 		// when need to find smems, should count number of matches
@@ -2792,7 +2775,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 				lower_b=iter_pos;
 				n=1;
 			}else{
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos += exp_search_move;
 	#if PREFETCH
 				_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
@@ -2892,7 +2875,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+				//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 				if (last_match_len > match_len){
 					iter_pos++;
 					match_len = last_match_len;
@@ -2901,7 +2884,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 			else{
 				// lookup key was bigger than middle, should check lower_b+1
 				last_match_len = match_len;
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
 	#if Count_mem_ref
 				count_search_linear++;
@@ -2918,14 +2901,14 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is bigger than read or exact matches with read,
+				//  stops when ref is bigger than read or exact matches with read,
 				if (last_match_len > match_len){
 					iter_pos--;
 					match_len = last_match_len;
 				}
 			}
 		}
-		// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+		//  iter_pos points to best exact matching position, match_len have the number of exact match
 		uint64_t search_start_pos = iter_pos;
 		uint32_t up_match=match_len, low_match=match_len, match_num=1;
 		if (1 != min_intv_value  ){
@@ -3066,7 +3049,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 					lower_b=iter_pos;
 					n=1;
 				}else{
-					// 1-- estimated position have smaller key than read, increase iter_pos and compare
+					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos += exp_search_move;
 		#if PREFETCH
 					_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
@@ -3150,7 +3133,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 			#endif
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+					//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 					if (last_match_len > match_len){
 						iter_pos++;
 						match_len = last_match_len;
@@ -3159,7 +3142,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 				else{
 					// lookup key was bigger than middle, should check lower_b+1
 					last_match_len = match_len;
-					// 1-- estimated position have smaller key than read, increase iter_pos and compare
+					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos =lower_b+1;
 			#if Count_mem_ref
 					count_search_linear++;
@@ -3177,7 +3160,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is bigger than read or exact matches with read,
+					//  stops when ref is bigger than read or exact matches with read,
 					if (last_match_len > match_len){
 						iter_pos--;
 						match_len = last_match_len;
@@ -3185,7 +3168,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 				}
 			}
 		}
-		// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+		//  iter_pos points to best exact matching position, match_len have the number of exact match
 		uint64_t search_start_pos = iter_pos;
 		uint32_t up_match=match_len, low_match=match_len, match_num=1;
 		// when need to find smems, should count number of matches
@@ -3381,7 +3364,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 			#endif
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+					//  stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 					if (last_match_len > match_len){
 						iter_pos++;
 						match_len = last_match_len;
@@ -3390,7 +3373,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 				else{
 					// lookup key was bigger than middle, should check lower_b+1
 					last_match_len = match_len;
-					// 1-- estimated position have smaller key than read, increase iter_pos and compare
+					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos =lower_b+1;
 			#if Count_mem_ref
 					count_search_linear++;
@@ -3408,7 +3391,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 
 						last_match_len = match_len;
 					}
-					// 1-- stops when ref is bigger than read or exact matches with read,
+					//  stops when ref is bigger than read or exact matches with read,
 					if (last_match_len > match_len){
 						iter_pos--;
 						match_len = last_match_len;
@@ -3417,7 +3400,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 			}
 
 		}
-		// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+		//  iter_pos points to best exact matching position, match_len have the number of exact match
 		uint64_t search_start_pos = iter_pos;
 		uint32_t up_match=match_len, low_match=match_len, match_num=1;
 		if (1 != min_intv_value  ){
@@ -3559,7 +3542,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				lower_b=iter_pos;
 				n=1;
 			}else{
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos += exp_search_move;
 	#if PREFETCH
 				_mm_prefetch(sa_pos+ ((iter_pos + exp_search_move*MEM_TRADEOFF_USECACHE_EXP_SEARCH_POW)*SASIZE), _MM_HINT_T0);
@@ -3599,7 +3582,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			
 		}
 		//done exponential search
-		// std::cout <<"[smemtradeoff] Binary search start\n";
 		//do binary search
 		middle=iter_pos;
 		while ( half = (n>>1)) {
@@ -3618,7 +3600,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			}
 			n -= half;
 		}
-		// std::cout <<"[smemtradeoff] Linear search start\n";
 		if (exact_match_flag){
 			iter_pos = lower_b;
 
@@ -3643,7 +3624,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 		#endif
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
+				// stops when ref is smaller than read, iter_pos should point to exact matching or bigger ref pos
 				if (last_match_len > match_len){
 					iter_pos++;
 					match_len = last_match_len;
@@ -3652,7 +3633,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			else{
 				// lookup key was bigger than middle, should check lower_b+1
 				last_match_len = match_len;
-				// 1-- estimated position have smaller key than read, increase iter_pos and compare
+				// estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
 		#if Count_mem_ref
 				count_search_linear++;
@@ -3670,7 +3651,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 
 					last_match_len = match_len;
 				}
-				// 1-- stops when ref is bigger than read or exact matches with read,
+				// stops when ref is bigger than read or exact matches with read,
 				if (last_match_len > match_len){
 					iter_pos--;
 					match_len = last_match_len;
@@ -3679,7 +3660,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 		}
 
 	}
-	// 1-- iter_pos points to best exact matching position, match_len have the number of exact match
+	// iter_pos points to best exact matching position, match_len have the number of exact match
 	uint64_t search_start_pos = iter_pos;
 	uint32_t up_match=match_len, low_match=match_len, match_num=1;
 	// when need to find smems, should count number of matches
@@ -3701,10 +3682,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					low++;
 					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
 
-					// if (low_match < match_len){
-					// 	low--;
-					// }
-
 				}
 				else if(up_match >= match_len &&  sa_num-2 >= up + search_start_pos){
 					#if Count_mem_ref
@@ -3712,10 +3689,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					#endif			
 					up++;
 					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
-					
-					// if (up_match < match_len){
-					// 	up--;
-					// }
 				}
 				else{
 					break;
@@ -3743,7 +3716,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			exp_search_move = std::min(search_start_pos-low, exp_search_move);
 			lower_b = search_start_pos-low-exp_search_move;
 			n=  upper_b-lower_b + 1;
-			// printf("[Low-exp] Up_b:%lld Low_b:%lld\n",upper_b, lower_b);
 			while (low_match >= match_len){
 				#if Count_mem_ref
 				count_search_min_intv++;
@@ -3763,7 +3735,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				upper_b = lower_b + exp_search_move;
 				n=  upper_b-lower_b + 1;
 			}
-			// printf("[Low]Upper_b: %lld Lower_b:%lld n:%lld\n",upper_b,lower_b,n);
 			//binary search 
 			while (uint64_t half = (n>>1)) {
 				if (match_len < raux->min_seed_len &&  up+search_start_pos-upper_b >= min_intv_value){
@@ -3784,7 +3755,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				#endif
 				
 				compare_read_and_ref_binary(pac, sa_pos, middle , raux, sa_num,match_len, &low_match,&exact_match_flag);
-				// printf("[BIN]n:%lld middle: %lld lower_b: %lld match_len: %lld low_match: %lld\n",n, middle, lower_b, match_len, low_match);
 				if (low_match >= match_len){
 					upper_b = middle;
 					if (upper_b !=0 && n<3){
@@ -3815,14 +3785,12 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			exp_search_move = std::min(sa_num-1-lower_b, exp_search_move);
 			upper_b = lower_b+exp_search_move;
 			n=  upper_b-lower_b + 1;
-			// printf("[Up-exp] Up_b:%lld Low_b:%lld\n",upper_b, lower_b);
 			while (up_match >= match_len){
 				#if Count_mem_ref
 				count_search_min_intv++;
 				#endif
 				compare_read_and_ref_binary(pac, sa_pos, upper_b, raux, sa_num,match_len, &up_match,&exact_match_flag);
 				if (up_match < match_len){
-					// found different position
 					break;
 				}
 				if (upper_b == sa_num-1){
@@ -3834,7 +3802,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				lower_b = upper_b-exp_search_move;
 				n=  upper_b-lower_b + 1;
 			}
-			// printf("[Up]Upper_b: %lld Lower_b:%lld n:%lld\n",upper_b,lower_b,n);
 			//binary search 
 			while (uint64_t half = (n>>1)) {
 				if (match_len < raux->min_seed_len &&  lower_b-search_start_pos+low >= min_intv_value){
@@ -3862,7 +3829,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 						compare_read_and_ref_binary(pac, sa_pos, (lower_b+1), raux, sa_num,match_len, &up_match,&exact_match_flag);
 					}
 				}
-				
 				n -= half;
 			}
 			up = lower_b+1 - search_start_pos;
@@ -3895,10 +3861,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 	}//end while 1
 #else
 	uint64_t up=1, low=1;
-	// up=1, low=1;
-	// match_len =last_match_len;
-	// iter_pos = search_start_pos;
-	// up_match=match_len, low_match=match_len, match_num=1;
 
 	while(1){
 		while (1){
@@ -3941,7 +3903,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			}
 		}
 		if (low_match == match_len && low > search_start_pos){
-			// low+=1;
 			low = search_start_pos+2;
 			low_match = 0;
 		}
@@ -3949,41 +3910,16 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 			up = sa_num+1-search_start_pos;	
 			up_match = 0;
 		}
-		match_num = up+low-3;//up+low+1-4;
+		match_num = up+low-3;
 		iter_pos=search_start_pos-low+2;
 		if (  match_num >= min_intv_value){
 				break;
 		}
 		match_len = up_match > low_match? up_match: low_match;
 	}//end while 1
-	// printf("[ORi]up: %lld low: %lld\n",up, low);
-	// printf("[ORi]match_num: %lld match_len: %lld up_match: %lld low_match: %lld\n",match_num, match_len, up_match, low_match);
 #endif
 	*exact_match_len = match_len;
 	// add found smems to smems and hits array
-#if REMOVE_DUP_SEED	
-	if (match_len>= raux->min_seed_len){
-		mem_tl mem;
-		mem.start = raux->pivot;
-		mem.end = raux->pivot + match_len;
-		mem.hitbeg = hits->n; // begin index in hits vector
-		mem.hitcount = match_num; // number of hits in reference
-		for (uint64_t i=0; i< match_num; i++){
-			if (iter_pos+i ==est_pos){
-				//don't add est_pos which is duplicate
-				mem.hitcount -= 1;
-				continue;
-			}
-			uint64_t pos_val = *(uint32_t*)(sa_pos + (iter_pos+i)*SASIZE );
-			pos_val = pos_val <<8 | sa_pos[(iter_pos+i)*SASIZE + 4];
-			kv_push(uint64_t, *hits, pos_val );
-		}
-		if(mem.hitcount){
-			kv_push(mem_tl, *smems, mem);
-		}
-	}
-	
-#else
 	if (match_len>= raux->min_seed_len){
 		mem_tl mem;
 		mem.start = raux->pivot;
@@ -3997,7 +3933,6 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 		}
 		kv_push(mem_tl, *smems, mem);
 	}
-#endif
 #if Count_mem_ref
 	fprintf(stdout,"[smem_search_linear func - right]\tMax match ref len:%d Count Total: %d Count_exp:%d Count_bs:%d Count_linear:%d Count_minintv:%d input minintv:%d\n",match_len,count_search_bs+count_search_linear+count_search_min_intv+count_search_exp,count_search_exp, count_search_bs, count_search_linear, count_search_min_intv, min_intv_value);
 #endif
