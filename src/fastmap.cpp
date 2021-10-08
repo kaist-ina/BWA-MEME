@@ -730,13 +730,14 @@ void memoryAlloc(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nthreads)
     w.useLearned = 0;
 }
 
-ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, worker_t &w)
+ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, worker_t &w, int index_)
 {
     ktp_aux_t *aux = (ktp_aux_t*) shared;
     ktp_data_t *ret = (ktp_data_t*) data;
 
     if (step == 0)
     {
+        fprintf(stderr, "[Read Chunk Called] index: %d\n", index_);
         ktp_data_t *ret = (ktp_data_t *) calloc(1, sizeof(ktp_data_t));
         assert(ret != NULL);
         uint64_t tim = __rdtsc();
@@ -787,7 +788,7 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
             assert(w.regs != NULL); assert(w.chain_ar != NULL); assert(w.seedBuf != NULL);
         }       
                                 
-        fprintf(stderr, "[0000] Calling mem_process_seqs.., task: %d\n", task++);
+        fprintf(stderr, "[0000] Calling mem_process_seqs.., task: %d index: %d\n", task++, index_);
 
         uint64_t tim = __rdtsc();
         if (opt->flag & MEM_F_SMARTPE)
@@ -845,6 +846,7 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
     /* Step 3: Write output */
     else if (step == 2)
     {
+        fprintf(stderr, "[Write Sam Called] index: %d\n", index_);
         aux->n_processed += ret->n_seqs;
         uint64_t tim = __rdtsc();
 
@@ -861,7 +863,7 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
         free(ret->seqs);
         free(ret);
         tprof[SAM_IO][0] += __rdtsc() - tim;
-
+        fprintf(stderr, "[Write Sam End] index: %d\n", index_);
         return 0;
     } // step 2
     
@@ -893,7 +895,7 @@ static void *ktp_worker(void *data)
         assert(pthread_ret == 0);
 
         // working on w->step
-        w->data = kt_pipeline(p->shared, w->step, w->step? w->data : 0, w->opt, *(w->w)); // for the first step, input is NULL
+        w->data = kt_pipeline(p->shared, w->step, w->step? w->data : 0, w->opt, *(w->w), w->index); // for the first step, input is NULL
 
         // update step and let other workers know
         pthread_ret = pthread_mutex_lock(&p->mutex);
@@ -1016,7 +1018,7 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
     
     /* pipeline using pthreads */
     ktp_t aux_;
-    int p_nt = pipe_threads; // 2;
+    int p_nt = std::max(pipe_threads,2); // 2;
     int n_steps = 3;
     
     w.ref_string = aux->ref_string;
@@ -1227,10 +1229,11 @@ int main_mem(int argc, char *argv[])
     
     /* Parse input arguments */
     // comment: added option '5' in the list
-    while ((c = getopt(argc, argv, "51qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:7")) >= 0)
+    while ((c = getopt(argc, argv, "513qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:7")) >= 0)
     {
         if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
         else if (c == '1') no_mt_io = 1;
+        else if (c == '3') no_mt_io = 3;
         else if (c == 'x') mode = optarg;
         else if (c == 'w') opt->w = atoi(optarg), opt0.w = 1;
         else if (c == 'A') opt->a = atoi(optarg), opt0.a = 1, assert(opt->a >= INT_MIN && opt->a <= INT_MAX);
@@ -1591,7 +1594,7 @@ int main_mem(int argc, char *argv[])
     tim = __rdtsc();
 
     /* Relay process function */
-    process(&aux, fp, fp2, no_mt_io? 1:2, idx_prefix, algo_num);
+    process(&aux, fp, fp2, no_mt_io, idx_prefix, algo_num);
     
     tprof[PROCESS][0] += __rdtsc() - tim;
 
