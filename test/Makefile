@@ -68,6 +68,9 @@ meme_align: MEME_aligner.o libbwa.a
 star_align: Star_aligner.o libbwa.a
 	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@  $^ $(LIBS) 
 
+fmi_align: FMI_aligner.o  
+	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@ $^ $(LIBS)
+
 loading_test: Learned_index_loadtime_test.o libbwa.a
 	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@ $^ $(LIBS)
 
@@ -103,6 +106,11 @@ FMI_seeding_reference.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h
 FMI_seeding_reference_big_read.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/kstring.h ../src/ksw.h ../src/ertseeding.h ../src/bwamem.h
 FMI_seeding_reference_big_read.o: ../src/bwa.h ../src/bwt.h ../src/kthread.h ../src/utils.h ../src/macro.h ../src/kseq.h  ../src/kvec.h
 FMI_seeding_reference_big_read.o: ../src/ksort.h ../src/profiling.h  
+
+FMI_aligner.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/kstring.h ../src/ksw.h ../src/ertseeding.h ../src/bwamem.h
+FMI_aligner.o: ../src/bwa.h ../src/bwt.h ../src/kthread.h ../src/utils.h ../src/macro.h ../src/kseq.h  ../src/kvec.h
+FMI_aligner.o: ../src/ksort.h ../src/profiling.h 
+
 
 Learned_index_seeding_test.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/LearnedIndex_seeding.h ../src/Learnedindex.h ../src/bwamem.h ../src/kvec.h
 Learned_index_seeding_test.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h 
