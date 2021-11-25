@@ -29,10 +29,10 @@
 ##*****************************************************************************************/
 
 
-EXE=		fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read
+EXE=		fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read star_align
 CXX=		g++
 CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw 
-CPPFLAGS=	-DENABLE_PREFETCH -DVTUNE_ANALYSIS
+CPPFLAGS=	-DENABLE_PREFETCH -DVTUNE_ANALYSIS -DSAIS=1
 INCLUDES=	-I../src  -I../ext/safestringlib/include  -I/opt/intel/oneapi/vtune/2021.5.0/include
 LIBS=	    -L..  -fopenmp -lz -lbwa -L../ext/safestringlib/libsafestring.a  -L../ext/safestringlib -lsafestring -L/opt/intel/oneapi/vtune/2021.5.0/sdk/lib64 -littnotify -ldl
 OBJS=		../src/fastmap.o ../src/main.o ../src/utils.o ../src/memcpy_bwamem.o ../src/kthread.o \
@@ -60,6 +60,12 @@ learned_test: Learned_index_seeding_test.o libbwa.a
 	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@  $^ $(LIBS) 
 
 learned_seeding_big_read: Learned_seeding_big_read.o libbwa.a
+	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@  $^ $(LIBS) 
+
+meme_align: MEME_aligner.o libbwa.a
+	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@  $^ $(LIBS) 
+
+star_align: Star_aligner.o libbwa.a
 	$(CXX)  $(CXXFLAGS) $(CPPFLAGS) -o $@  $^ $(LIBS) 
 
 loading_test: Learned_index_loadtime_test.o libbwa.a
@@ -104,6 +110,11 @@ Learned_index_seeding_test.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/ma
 Learned_seeding_big_read.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/LearnedIndex_seeding.h ../src/Learnedindex.h ../src/bwamem.h ../src/kvec.h
 Learned_seeding_big_read.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h 
 
+MEME_aligner.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/LearnedIndex_seeding.h ../src/Learnedindex.h ../src/bwamem.h ../src/kvec.h
+MEME_aligner.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h 
+
+Star_aligner.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h  ../src/LearnedIndex_seeding.h ../src/Learnedindex.h ../src/bwamem.h ../src/kvec.h
+Star_aligner.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h 
 
 ERT_seeding_test.o: ../src/FMI_search.h ../src/bntseq.h ../src/read_index_ele.h   ../src/ertseeding.h ../src/bwamem.h ../src/kvec.h
 ERT_seeding_test.o: ../src/bwa.h ../src/bwt.h ../src/utils.h ../src/macro.h 
