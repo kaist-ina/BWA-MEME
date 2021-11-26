@@ -53,6 +53,7 @@ extern "C" {
 double SA_NUM;
 char* L1_PARAMETERS;
 char* L2_PARAMETERS;
+
 // sa_raux_buf is used to select properly aligned read among unpacked_queue_binary_buf_shift*
 uint8_t sa_raux_buf[4][4]= {
 	{0,3,2,1},
@@ -118,6 +119,9 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 	}
 	return true;
 }
+
+
+
 void learned_index_cleanup() {
 	free(L1_PARAMETERS);
 	free(L2_PARAMETERS);
@@ -203,6 +207,8 @@ inline uint64_t learned_index_lookup(uint64_t key, size_t* err) { //p-rmi
 
 	return FCLAMP(fpred, SA_NUM - 1.0);
 }
+
+
 
 /*
 * About compare_read_and_ref_binary function
@@ -1455,6 +1461,229 @@ void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* ia
 		}
 }
 
+
+void Learned_getSMEMsOnePosOneThread_no_smem(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false) {
+	/*
+		Perform extension in zigzag style
+	*/
+
+	uint64_t key;
+    uint64_t err ;
+    uint64_t position ;
+	uint64_t ss_position ;
+	uint32_t exact_match_len ;
+	uint32_t ss_exact_match_len ;
+	uint32_t next_pivot ;
+	int64_t suffix_array_num = iaux->bns->l_pac*2;
+	uint32_t ambiguous_pos;
+	// Right extension from pivot, save next raux->pivot
+	bool right_forward= true;
+#if MEM_TRADEOFF
+	bool no_search ; // when short read has full-match in reference, reuse position without search
+#endif
+	// Check pivot point whether ambiguous base appears
+	if (raux->unpacked_queue_buf[raux->pivot] >= 4){
+		if (raux->l_seq - raux->pivot < raux->min_seed_len ){
+			set_forward_pivot(raux, raux->l_seq );
+			// set_forward_pivot(raux, raux->pivot+1 );
+		}
+		else{
+			set_forward_pivot(raux, raux->pivot+1 );
+		}
+		return;
+	}
+	if (raux->pivot !=0 && raux->unpacked_queue_buf[raux->pivot-1] < 4){
+		// - 2. Infer Learned index and get prediction
+		next_pivot = raux->l_seq;
+		int search_pivot = raux->pivot;
+		while (search_pivot < next_pivot){
+			if (raux->unpacked_queue_buf[search_pivot] >= 4){
+				if (raux->l_seq - search_pivot < raux->min_seed_len ){
+					set_forward_pivot(raux, raux->l_seq );
+					search_pivot = raux->l_seq;
+					// set_forward_pivot(raux, raux->pivot+1 );
+				}
+				else{
+					search_pivot += 1; 
+					set_forward_pivot(raux, raux->pivot+1 );
+				}
+				continue;
+			}
+			// Left extension from pivot, raux->pivot should be updated at every extension direction change
+#if MEM_TRADEOFF
+			right_forward = false;
+			// Make uint64_t Key starting from pivot point
+			key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
+			if (raux ->max_l_seq == raux->l_seq){
+				ss_position =  *(uint32_t*)(iaux->ref2sa+(suffix_array_num - raux->max_refpos - raux->pivot-1)*5);
+				ss_position = ss_position <<8 | iaux->ref2sa[(suffix_array_num - raux->max_refpos - raux->pivot-1)*5+4];
+	#if PREFETCH
+				_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+				no_search= true;
+
+				ss_position = mem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, right_forward, &ss_exact_match_len,&ambiguous_pos,no_search);
+			}
+			else{
+				if (use_cached && (raux->pivot< raux->cache_pivot_end) && ( raux->cache_pivot +MEM_TRADEOFF_USECACHE_THRESHOLD <= raux->pivot) ){
+	#if DEBUG_MODE
+					assert(raux->pivot> raux->cache_pivot);
+	#endif
+					ss_position =  *(uint32_t*)(iaux->ref2sa+(suffix_array_num + raux->cache_pivot - raux->cache_refpos - raux->pivot-1)*5);
+					ss_position = ss_position <<8 | iaux->ref2sa[(suffix_array_num + raux->cache_pivot - raux->cache_refpos - raux->pivot-1)*5+4];
+	#if PREFETCH
+					_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+					no_search=false;
+					ss_position = mem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, right_forward, &ss_exact_match_len,&ambiguous_pos,no_search);
+				}else{
+					ss_position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+					_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+					ss_position = mem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, err, right_forward, &ss_exact_match_len,&ambiguous_pos);
+				}
+			}
+			set_forward_pivot(raux,  raux->pivot - ss_exact_match_len+1 );
+			if(next_pivot - raux->pivot < raux->min_seed_len ){
+				break;
+			}
+			right_forward = true;
+			key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
+			if (raux ->max_l_seq == raux->l_seq){
+	
+				ss_position =  *(uint32_t*)(iaux->ref2sa+(raux->max_refpos + raux->pivot)*5);
+				ss_position = ss_position <<8 | iaux->ref2sa[(raux->max_refpos + raux->pivot)*5+4];
+	#if PREFETCH
+				_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+				no_search= true;
+				// ss_position = right_smem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+				// 					 raux, ss_position, &ss_exact_match_len, smems, hits, &ambiguous_pos,no_search);	
+				ss_position = mem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, right_forward, &ss_exact_match_len,&ambiguous_pos,no_search);
+				
+
+			}else{
+				if (use_cached && (raux->cache_pivot_end>= (raux->pivot+MEM_TRADEOFF_USECACHE_THRESHOLD)) && (raux->pivot>= raux->cache_pivot) ){
+	#if DEBUG_MODE
+					assert(raux->pivot>= raux->cache_pivot);
+	#endif
+					ss_position =  *(uint32_t*)(iaux->ref2sa+(raux->cache_refpos + raux->pivot - raux->cache_pivot)*5);
+					ss_position = ss_position <<8 | iaux->ref2sa[(raux->cache_refpos + raux->pivot - raux->cache_pivot)*5+4];
+	#if PREFETCH
+					_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+					no_search=false;
+					// ss_position = right_smem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+					// 					raux, ss_position, &ss_exact_match_len, smems, hits, &ambiguous_pos,no_search);
+					ss_position = mem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, right_forward, &ss_exact_match_len,&ambiguous_pos,no_search);
+				}else{
+					ss_position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+					_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+					// ss_position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+					// 					raux, ss_position, err, &ss_exact_match_len, smems, hits, &ambiguous_pos);
+					
+					ss_position = mem_search_tradeoff(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+									 raux, ss_position, right_forward, &ss_exact_match_len,&ambiguous_pos,no_search);
+	
+				}
+			}
+#else
+			right_forward = false;
+			key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
+			ss_position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+			_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+			
+			ss_position = mem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+							raux, ss_position, err, right_forward, &ss_exact_match_len,&ambiguous_pos);
+			set_forward_pivot(raux,  raux->pivot - ss_exact_match_len+1 );
+
+			if(next_pivot - raux->pivot < raux->min_seed_len ){
+				break;
+			}
+
+			right_forward = true;
+
+			key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
+			ss_position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+			_mm_prefetch(iaux->sa_pos+ (ss_position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+			// ss_position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+			// 						 raux, ss_position, err, &ss_exact_match_len, smems, hits, &ambiguous_pos);
+			
+			ss_position = mem_search(iaux->ref_string, iaux->sa_pos,iaux->pac, suffix_array_num, 
+									 raux, ss_position, err, right_forward, &ss_exact_match_len,&ambiguous_pos);
+			
+#endif
+
+#if DEBUG_MODE
+			assert( (raux->pivot+ss_exact_match_len) > search_pivot);
+#endif
+			search_pivot = raux->pivot + ss_exact_match_len ;
+			
+			set_forward_pivot(raux,   search_pivot );
+		}
+	}
+	else{
+		key = Tokenization(raux, right_forward, &ambiguous_pos, hasN);
+		// - 2. Infer Learned index and get prediction		
+#if MEM_TRADEOFF
+		position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+		_mm_prefetch(iaux->sa_pos+ (position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif	
+		// position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+		// 							raux, position, err, &exact_match_len,smems,hits,&ambiguous_pos);
+
+		position = mem_search(iaux->ref_string, iaux->sa_pos,iaux->pac, suffix_array_num, 
+									 raux, position, err, right_forward, &exact_match_len,&ambiguous_pos);
+	#if MEM_TRADEOFF_CACHED && PREFETCH
+		if (exact_match_len>= raux->min_seed_len){
+
+			uint64_t pos_val = *(uint32_t*)(iaux->sa_pos + position*SASIZE );
+			pos_val = pos_val <<8 | iaux->sa_pos[position*SASIZE + 4];
+			_mm_prefetch( iaux->ref2sa+ pos_val*5, _MM_HINT_T1 );
+			_mm_prefetch( iaux->ref2sa+ (suffix_array_num - pos_val - exact_match_len-1)*5, _MM_HINT_T1 );
+		}
+	#endif
+		if (exact_match_len == raux->l_seq){
+			raux->max_l_seq = exact_match_len;
+			uint64_t pos_val = *(uint32_t*)(iaux->sa_pos + position*SASIZE );
+			pos_val = pos_val <<8 | iaux->sa_pos[position*SASIZE + 4];
+			raux->max_refpos = pos_val;
+			raux->max_pivot = 0;
+	#if PREFETCH
+			_mm_prefetch( iaux->ref2sa+ raux->max_refpos*5, _MM_HINT_T1 );
+			_mm_prefetch( iaux->ref2sa+ (suffix_array_num - raux->max_refpos - raux->l_seq - 1)*5, _MM_HINT_T1 );
+	#endif
+		}
+#else
+		position = learned_index_lookup(key ,&err);
+	#if PREFETCH
+		_mm_prefetch(iaux->sa_pos+ (position*SASIZE)-SASIZE, _MM_HINT_T0);
+	#endif
+		// position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
+		// 							 raux, position, err, &exact_match_len,smems,hits,&ambiguous_pos);
+		
+		position = mem_search(iaux->ref_string, iaux->sa_pos,iaux->pac, suffix_array_num, 
+									 raux, position, err, right_forward, &exact_match_len,&ambiguous_pos);
+#endif	
+		next_pivot = raux->pivot + exact_match_len;
+	}
+	set_forward_pivot(raux,    next_pivot );
+}
+
+
 void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false) {
 	/*
 		Perform extension in zigzag style
@@ -1603,6 +1832,8 @@ void Learned_getSMEMsOnePosOneThread_step1(Learned_index_aux_t* iaux, Learned_re
 	#endif
 			ss_position = right_smem_search(iaux->ref_string, iaux->sa_pos, iaux->pac, suffix_array_num, 
 									 raux, ss_position, err, &ss_exact_match_len, smems, hits, &ambiguous_pos);
+			
+			
 #endif
 
 #if DEBUG_MODE
