@@ -240,6 +240,10 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
  */
 void Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN);
 
+
+
+void Learned_getSMEMsOnePosOneThread_no_smem(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false);
+
 /*
  * Same as getSMEMsAllPosOneThread in BWA-MEM2
  * Does not integrate step2 in seeding, getSMEMsOnePosOne
