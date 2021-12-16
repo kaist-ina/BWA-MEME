@@ -282,31 +282,38 @@ int64_t run_fmi(FMI_search* fmiSearch, bseq1_t *seqs, SMEM ** batchStart, int ba
             for(int batch_id = 0; batch_id < num_batches; batch_id++)
             {
                 
+                if (numthreads >1){
+                    printf("\n\n***Please use single thread to print SMEM output***\n\n");
+                    assert(0);
+                }
+
                 SMEM *myMatchArray = batchStart[batch_id];
                 int64_t i;
                 
                 for(i = 0; i < numTotalSmem[batch_id]; i++)
                 {
                     SMEM smem = myMatchArray[i];
-                    if(smem.rid != prevRid)
-                    {
-                        int32_t j;
-                        for(j = prevRid + 1; j <= smem.rid; j++)
-                            printf("%u:\n", j);
-                    }
-                    prevRid = smem.rid;
-                    printf("[%u,%u]", smem.m, smem.n + 1);
-                    // printf("%u, %u]", smem.k, smem.s);
-                    printf(" ["); 
-                    int64_t u1, u2, u3;
-                    u1 = smem.k;
-                    u2 = smem.k + smem.s;
-                    for(u3 = u1; u3 < u2; u3++)
-                    {
-                        printf("%ld,", fmiSearch->get_sa_entry_compressed(u3));
-                    }
-                    printf("]"); 
-                    printf("\n");
+                    // print read_id, smem start pos in read, smem end pos in read, SA start pos, number of SMEM
+                    printf("%u\t%u\t%u\t%u\t%u\n",smem.rid, smem.m, smem.n + 1, smem.k, smem.s);
+
+                    // if(smem.rid != prevRid)
+                    // {
+                    //     int32_t j;
+                    //     for(j = prevRid + 1; j <= smem.rid; j++)
+                    //         printf("%u\n", j);
+                    // }
+                    // prevRid = smem.rid;
+                    // printf("[%u,%u]", smem.m, smem.n + 1);
+                    // printf(" ["); 
+                    // int64_t u1, u2, u3;
+                    // u1 = smem.k;
+                    // u2 = smem.k + smem.s;
+                    // for(u3 = u1; u3 < u2; u3++)
+                    // {
+                    //     printf("%ld,", fmiSearch->get_sa_entry_compressed(u3));
+                    // }
+                    // printf("]"); 
+                    // printf("\n");
                 }
             }
         }
