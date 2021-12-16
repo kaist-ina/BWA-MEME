@@ -54,7 +54,7 @@ KSEQ_DECLARE(gzFile)
 
 int64_t run_fmi(FMI_search* fmiSearch, bseq1_t *seqs, SMEM ** batchStart, int batch_size, 
                 int64_t* numTotalSmem, int64_t*workTicks, int64_t num_batches,
-                int32_t numReads,int numthreads, int64_t total_size, int steps, int rid_start ){
+                int32_t numReads,int numthreads, int64_t total_size, int steps, int rid_start, std::ofstream* smem_fp  ){
     int32_t *query_cum_len_ar = (int32_t *)_mm_malloc(numReads * sizeof(int32_t), 64);
     assert(query_cum_len_ar !=NULL);
     int64_t i;
@@ -295,7 +295,12 @@ int64_t run_fmi(FMI_search* fmiSearch, bseq1_t *seqs, SMEM ** batchStart, int ba
                     SMEM smem = myMatchArray[i];
                     // print read_id, smem start pos in read, smem end pos in read, SA start pos, number of SMEM
                     printf("%u\t%u\t%u\t%u\t%u\n",smem.rid, smem.m, smem.n + 1, smem.k, smem.s);
-
+                    (*smem_fp).write(reinterpret_cast<const char*>(&smem.rid), sizeof(uint32_t));
+                    (*smem_fp).write(reinterpret_cast<const char*>(&smem.m), sizeof(uint32_t));
+                    (*smem_fp).write(reinterpret_cast<const char*>(&smem.n), sizeof(uint32_t));
+                    (*smem_fp).write(reinterpret_cast<const char*>(&smem.k), sizeof(int64_t));
+                    (*smem_fp).write(reinterpret_cast<const char*>(&smem.s), sizeof(int64_t));
+                    
                     // if(smem.rid != prevRid)
                     // {
                     //     int32_t j;
@@ -329,15 +334,8 @@ int64_t run_fmi(FMI_search* fmiSearch, bseq1_t *seqs, SMEM ** batchStart, int ba
     __itt_pause();
 #endif    
     endTick = __rdtsc();
-
     
-    
-    // if(query_cum_len_ar)_mm_free(query_cum_len_ar);
     _mm_free(query_cum_len_ar);
-    // for(int tid = 0; tid < numthreads; tid++)
-    // {
-    //     if (matchArray[tid])free(matchArray[tid]);
-    // }
     if (enc_qdb)free(enc_qdb);
 
     
@@ -380,13 +378,6 @@ int main(int argc, char **argv) {
 
     bseq1_t *seqs;
 
-
-    // seqs = bseq_read_one_fasta_file(QUERY_DB_SIZE, &numReads, fp, &total_size);
-    // if(seqs == NULL)
-    // {
-    //     printf("ERROR! seqs = NULL\n");
-    //     exit(EXIT_FAILURE);
-    // }
     kseq_t* ks = kseq_init(fp);
     seqs = bseq_read_orig(QUERY_DB_SIZE*numthreads,  &numReads, ks, NULL, &total_size);
     // seqs = bseq_read_one_fasta_file(QUERY_DB_SIZE, &numReads, fp, &total_size);
@@ -407,7 +398,13 @@ int main(int argc, char **argv) {
     int max_readlength = seqs[0].l_seq;
     int min_readlength = seqs[0].l_seq;
     
-    
+    char smem_out_filename[PATH_MAX];
+    // strcpy_s(smem_out_filename, PATH_MAX, prefix);
+
+    strcat_s(smem_out_filename, PATH_MAX, "smem_results.binary");
+    std::ofstream smem_out(smem_out_filename, std::ios_base::trunc | std::ios::binary);
+
+
     int64_t total_exec_time= 0;
     int32_t batch_id = 0;
     int64_t totalSmem = 0;
@@ -424,38 +421,25 @@ int main(int argc, char **argv) {
         totalreadsize += total_size;
         total_exec_time += run_fmi(fmiSearch, seqs, batchStart, batch_count, 
             numTotalSmem, workTicks,num_batches, numReads, 
-            numthreads,total_size, steps, rid_start );
+            numthreads,total_size, steps, rid_start , &smem_out);
         fprintf(stderr,"Processed %ld, Total exec time: %lld ticks, TotalReads = %d, max_readlength = %d, total_size = %lld\n",numReads,total_exec_time,  totalnumread, max_readlength, totalreadsize);
         rid_start += numReads;
         for(batch_id = 0; batch_id < num_batches; batch_id++)
         {
             totalSmem += numTotalSmem[batch_id];
         }
-        // printf("Before free seqs\n");
         for (i=0;i<numReads;i++ ){
-            // if(seqs[i]){
-            //     if(seqs[i].name) free(seqs[i].name);
-            //     if(seqs[i].comment) free(seqs[i].comment);
-            //     if(seqs[i].seq) free(seqs[i].seq);
-            //     if(seqs[i].qual) free(seqs[i].qual);
-            //     if(seqs[i].sam) free(seqs[i].sam);
-                
-            // }
-            // printf("numread:%d i=%d\n",numReads, i);
+
             free(seqs[i].name);
             free(seqs[i].comment);
             free(seqs[i].seq);
             free(seqs[i].qual);
-            // free(seqs[i].sam);
         }
         free(seqs);
         
-        // printf("Paasss\n");
         numReads =0;
         total_size =0;
-        // kseq_t* ks = kseq_init(fp);
         seqs = bseq_read_orig(QUERY_DB_SIZE*numthreads,  &numReads, ks, NULL, &total_size);
-        // seqs = bseq_read_one_fasta_file(QUERY_DB_SIZE, &numReads, fp, &total_size);
         if (seqs){
             batch_count=batch_size;
             if (batch_count >= numReads){
@@ -464,16 +448,11 @@ int main(int argc, char **argv) {
             assert(batch_count!=0);
             num_batches = (numReads + batch_count - 1 ) / batch_count;
             assert(num_batches!=0);
-            // printf("%d %d %d\n", num_batches * sizeof(int64_t) ,num_batches * sizeof(SMEM *),numReads * sizeof(int32_t) );
             if (lastnum_batches < num_batches){
-                // printf("%d %d %d\n", num_batches * sizeof(int64_t) ,num_batches * sizeof(SMEM *),numReads * sizeof(int32_t) );
                 numTotalSmem = (int64_t *) realloc(numTotalSmem, num_batches * sizeof(int64_t));
                 batchStart = (SMEM **) realloc(batchStart, num_batches * sizeof(SMEM *));
             }
-            
-            
-
-            }
+        }
         else{
             fprintf(stderr,"[Done]TotalReads = %d\n", totalnumread);    
             break;
@@ -499,18 +478,10 @@ int main(int argc, char **argv) {
     if (steps<4){
         printf("[RESULT]\t%ld\t%d\t%lf\t%ld\t%ld\n",steps,numthreads, avgTicks, totalSmem, totalnumread);
     }
-
-    
-    // _mm_free(query_cum_len_ar);
-    // free(enc_qdb);
-    // for(int tid = 0; tid < numthreads; tid++)
-    // {
-    //     free(matchArray[tid]);
-    // }
+    smem_out.close();
     
     free(numTotalSmem);
     free(batchStart);
-    // free(min_intv_array);
     delete fmiSearch;
     return 0;
 }
