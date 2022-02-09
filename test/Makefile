@@ -31,10 +31,15 @@
 
 EXE=		fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read star_align
 CXX=		g++
-CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw 
-CPPFLAGS=	-DENABLE_PREFETCH -DVTUNE_ANALYSIS -DSAIS=1
-INCLUDES=	-I../src  -I../ext/safestringlib/include  -I/opt/intel/oneapi/vtune/2021.5.0/include
-LIBS=	    -L..  -fopenmp -lz -lbwa -L../ext/safestringlib/libsafestring.a  -L../ext/safestringlib -lsafestring -L/opt/intel/oneapi/vtune/2021.5.0/sdk/lib64 -littnotify -ldl
+CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw
+
+CPPFLAGS=	-DENABLE_PREFETCH  -DSAIS=1
+INCLUDES=	-I../src  -I../ext/safestringlib/include  
+LIBS=	    -L..  -fopenmp -lz -lbwa -L../ext/safestringlib/libsafestring.a  -L../ext/safestringlib -lsafestring 
+
+#CPPFLAGS=	-DENABLE_PREFETCH -DVTUNE_ANALYSIS -DSAIS=1
+#INCLUDES=	-I../src  -I../ext/safestringlib/include  -I/opt/intel/oneapi/vtune/2021.6.0/include
+#LIBS=	    -L..  -fopenmp -lz -lbwa -L../ext/safestringlib/libsafestring.a  -L../ext/safestringlib -lsafestring -L/opt/intel/oneapi/vtune/2021.6.0/sdk/lib64 -littnotify -ldl
 OBJS=		../src/fastmap.o ../src/main.o ../src/utils.o ../src/memcpy_bwamem.o ../src/kthread.o \
 			../src/kstring.o ../src/ksw.o ../src/bwt.o ../src/ertindex.o ../src/Learnedindex.o ../src/bntseq.o ../src/bwamem.o ../src/ertseeding.o ../src/LearnedIndex_seeding.o ../src/profiling.o ../src/bandedSWA.o \
 			../src/FMI_search.o ../src/read_index_ele.o ../src/bwamem_pair.o ../src/kswv.o ../src/bwa.o \
