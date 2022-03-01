@@ -34,6 +34,7 @@ rmi_data
 *.kmer_table
 *.mlt_table
 test/small_ref/
+test/results/
 test/reference_result.txt
 test/result_learned.txt
 human_g1k_v37.fasta.*_suffixarray_uint64_data.h
