@@ -5,6 +5,22 @@ It leverages **learned index** in **suffix array search** which requires ~118 GB
 BWA-MEME also provides feature to accomodate various memory size in servers.
 BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster. 
 
+- [Getting Started](#getting-started)
+  * [Compile the code](#compile-the-code)
+  * [Training RMI - prerequisites](#training-rmi---prerequisites)
+  * [Build index of the reference DNA sequence](#build-index-of-the-reference-dna-sequence)
+  * [Run alignment and compare SAM output](#run-alignment-and-compare-sam-output)
+  * [Test scripts and executables are available in the test folder](#test-scripts-and-executables-are-available-in-the-test-folder)
+- [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
+- [Notes](#notes)
+- [Citation](#citation)
+
+## Performance of BWA-MEME
+### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
+
+### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
 
 ## Getting Started
 ### Compile the code
