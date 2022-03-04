@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
   * [Compile the code](#compile-the-code)
   * [Training RMI - prerequisites](#training-rmi---prerequisites)
-  * [Reference file download](#reference-file-download)
+  * [(Optional)Reference file download](#reference-file-download)
   * [Build index of the reference DNA sequence](#build-index-of-the-reference-dna-sequence)
   * [(Optional) Download pre-trained P-RMI learned-index model](#-optional--download-pre-trained-p-rmi-learned-index-model)
   * [Run alignment and compare SAM output](#run-alignment-and-compare-sam-output)
@@ -57,7 +57,7 @@ make -j<num_threads>
 ### Training RMI - prerequisites
 To use the RMI train code, please [install Rust](https://rustup.rs/).
 
-### Reference file download
+### (Optional) Reference file download
 You can download the reference using the command below.
 ```sh
 # Download human_g1k_v37.fasta human genome and decompress it
