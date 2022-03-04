@@ -9,8 +9,6 @@
 ## Contents
 - [When to use BWA-MEME](#when-to-use-bwa-meme)
 - [Performance of BWA-MEME](#performance-of-bwa-meme)
-    + [The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.](#the-seeding-module-of-bwa-meme-uses-learned-index-this--in-turn--results-in-332x-higher-seeding-throughput-compared-to-fm-index-of-bwa-mem2)
-    + [End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.](#end-to-end-alignment-throughput-is-up-to-14x-higher-than-bwa-mem2)
 - [Getting Started](#getting-started)
   * [Compile the code](#compile-the-code)
   * [Training RMI - prerequisites](#training-rmi---prerequisites)
