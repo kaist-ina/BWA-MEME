@@ -21,10 +21,10 @@
 
 ## Performance of BWA-MEME
 #### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
-![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg){: width="100" }
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
 
 #### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
-![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg){: width="100" }
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
 
 ## Getting Started
 ### Compile the code
