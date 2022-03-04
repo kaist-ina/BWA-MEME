@@ -1,10 +1,11 @@
-### BWA-MEME: BWA-MEM emulated with a machine learning approach 
+## BWA-MEME: BWA-MEM emulated with a machine learning approach 
+- BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster. 
+- BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
+- BWA-MEME leverages **learned index** in **suffix array search**.
+- BWA-MEME also provides feature to accomodate various memory size in servers.
+---
 
-BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
-It leverages **learned index** in **suffix array search** which requires ~118 GB for the human genome.
-BWA-MEME also provides feature to accomodate various memory size in servers.
-BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster. 
-
+## Contents
 - [Getting Started](#getting-started)
   * [Compile the code](#compile-the-code)
   * [Training RMI - prerequisites](#training-rmi---prerequisites)
@@ -14,13 +15,16 @@ BWA-MEME produces identical results as BWA-MEM2 and is 1.4x faster.
 - [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
 - [Notes](#notes)
 - [Citation](#citation)
+---
+## When to use BWA-MEME
+#### While hardware acceleration provides much more speedup, it often comes with a higher cost for alignment throughput.
 
 ## Performance of BWA-MEME
-### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
-![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
+#### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg){: width="100" }
 
-### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
-![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg)
+#### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
+![Seeding throughput](/images/BWA-MEME-SeedingEval.jpg){: width="100" }
 
 ## Getting Started
 ### Compile the code
@@ -90,6 +94,7 @@ diff <output_mem2.sam> <output_meme.sam>
 
 * BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
 
+* When deploying BWA-MEME with many threads (>72), mimalloc library is recommended to avoid performance drop issue.
 
 ## Citation
 
