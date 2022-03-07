@@ -12,8 +12,8 @@
 - [Getting Started](#getting-started)
   * [Compile the code](#compile-the-code)
   * [Training RMI - prerequisites](#training-rmi---prerequisites)
-  * [(Optional)Reference file download](#reference-file-download)
   * [Build index of the reference DNA sequence](#build-index-of-the-reference-dna-sequence)
+  * [(Optional) Reference file download](#reference-file-download)
   * [(Optional) Download pre-trained P-RMI learned-index model](#-optional--download-pre-trained-p-rmi-learned-index-model)
   * [Run alignment and compare SAM output](#run-alignment-and-compare-sam-output)
   * [Test scripts and executables are available in the test folder](#test-scripts-and-executables-are-available-in-the-test-folder)
@@ -23,7 +23,7 @@
 ---
 ## When to use BWA-MEME
 - Anyone who use BWA-MEM in CPU-only machine (BWA-MEME requires 38GB of memory for index at minimal mode)
-- Building high-throughput NGS alignment cluster with low Cost per Alignment throughput. CPU alignment can be cheaper than using hardware acceleration (GPU, FPGA)
+- Building high-throughput NGS alignment cluster with low cost/throughput. CPU-only alignment can be cheaper than using hardware acceleration (GPU, FPGA) in terms of total cost divided by alignment throughput.
 
 
 ## Performance of BWA-MEME
@@ -57,24 +57,23 @@ make -j<num_threads>
 ### Training RMI - prerequisites
 To use the RMI train code, please [install Rust](https://rustup.rs/).
 
+### Build index of the reference DNA sequence
+- Building Suffix array, Inverse suffix array 
+```sh
+# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
+./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
+```
+- Training P-RMI learned-index model
+```sh
+# Run code below to train P-RMI, suffix array is required which is generated in index build code
+./build_rmis_dna.sh <input.fasta>
+```
 ### (Optional) Reference file download
 You can download the reference using the command below.
 ```sh
 # Download human_g1k_v37.fasta human genome and decompress it
 wget ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
 gunzip human_g1k_v37.fasta.gz
-```
-
-### Build index of the reference DNA sequence
-- Suffix array, Inverse suffix array 
-```sh
-# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
-./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
-```
-- P-RMI learned-index model
-```sh
-# Run code below to train P-RMI, suffix array is required which is generated in index build code
-./build_rmis_dna.sh <input.fasta>
 ```
 
 ### (Optional) Download pre-trained P-RMI learned-index model
