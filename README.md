@@ -24,7 +24,7 @@
 ## When to use BWA-MEME
 - Anyone who use BWA-MEM in CPU-only machine (BWA-MEME requires 38GB of memory for index at minimal mode)
 - Building high-throughput NGS alignment cluster with low cost/throughput. CPU-only alignment can be cheaper than using hardware acceleration (GPU, FPGA) in terms of total cost divided by alignment throughput.
-
+- Just add single option "-7" to deploy BWA-MEME instead of BWA-MEM2 (BWA-MEME does not change anything, except the speed).
 
 ## Performance of BWA-MEME
 #### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
