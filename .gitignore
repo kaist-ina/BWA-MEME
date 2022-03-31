@@ -25,6 +25,8 @@
 *.sse42
 *PARAMETERS
 *-tmp
+bwa-meme
+bwa-mem2
 a.out
 *.txt
 *.tar.gz
@@ -49,3 +51,7 @@ test/ref.fa.ref2sa
 test/result_learned.txt
 test/reference_result.txt
 test/query_error.fastq
+test/ert_seeding_big_read
+test/fmi_seeding_big_read
+test/learned_seeding_big_read
+test/star_align
