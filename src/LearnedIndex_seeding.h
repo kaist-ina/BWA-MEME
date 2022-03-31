@@ -72,7 +72,7 @@ extern "C" {
 	3: BWA-MEME full
 */
 // Change Mode 
-#define MODE 3
+// #define MODE 3
 
 
 // No need to change below

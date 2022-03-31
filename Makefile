@@ -32,8 +32,16 @@ ifneq ($(portable),)
 	STATIC_GCC=-static-libgcc -static-libstdc++
 endif
 
-EXE=		bwa-mem2
+EXE=		bwa-meme
 #CXX=		icpc
+
+# BWA-MEME Mode
+# 1: Without 64bit key and ISA, 38GB for index
+# 2: Without ISA, 88GB for index
+# 3: BWA-MEME full, 118GB for index
+MODE=3
+
+
 ifeq ($(CXX), icpc)
 	CC= icc
 else ifeq ($(CXX), g++)
@@ -41,9 +49,8 @@ else ifeq ($(CXX), g++)
 endif		
 ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
-CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) 
-# youngmok added -std=c++17 for filesystem support
-INCLUDES=   -Isrc -Iext/safestringlib/include -std=c++17 
+CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 -DMODE=$(MODE) $(MEM_FLAGS) 
+INCLUDES=   -Isrc -Iext/safestringlib/include 
 LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC) 
 OBJS=		src/fastmap.o src/main.o src/utils.o src/memcpy_bwamem.o src/kthread.o \
 			src/kstring.o src/ksw.o src/bwt.o src/ertindex.o src/Learnedindex.o src/bntseq.o src/bwamem.o src/ertseeding.o src/LearnedIndex_seeding.o src/profiling.o src/bandedSWA.o \
@@ -103,16 +110,16 @@ all:$(EXE)
 
 multi:
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=sse41    EXE=bwa-mem2.sse41    CXX=$(CXX) all
+	$(MAKE) arch=sse41    EXE=bwa-meme.sse41    CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=sse42    EXE=bwa-mem2.sse42    CXX=$(CXX) all
+	$(MAKE) arch=sse42    EXE=bwa-meme.sse42    CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx    EXE=bwa-mem2.avx    CXX=$(CXX) all
+	$(MAKE) arch=avx    EXE=bwa-meme.avx    CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx2   EXE=bwa-mem2.avx2     CXX=$(CXX) all
+	$(MAKE) arch=avx2   EXE=bwa-meme.avx2     CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx512 EXE=bwa-mem2.avx512bw CXX=$(CXX) all
-	$(CXX) -Wall -O3 src/runsimd.cpp -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-mem2
+	$(MAKE) arch=avx512 EXE=bwa-meme.avx512bw CXX=$(CXX) all
+	$(CXX) -Wall -O3 src/runsimd.cpp -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme
 
 
 $(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o
@@ -125,14 +132,13 @@ $(SAFE_STR_LIB):
 	cd ext/safestringlib/ && $(MAKE) clean && $(MAKE) CC=$(CC) directories libsafestring.a
 
 clean:
-	rm -fr src/*.o $(BWA_LIB) $(EXE) bwa-mem2.sse41 bwa-mem2.sse42 bwa-mem2.avx bwa-mem2.avx2 bwa-mem2.avx512bw
+	rm -fr src/*.o $(BWA_LIB) $(EXE) bwa-meme.sse41 bwa-meme.sse42 bwa-meme.avx bwa-meme.avx2 bwa-meme.avx512bw
 	cd ext/safestringlib/ && $(MAKE) clean
 
 depend:
 	(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CXXFLAGS) $(CPPFLAGS) -I. -- src/*.cpp)
 
 # DO NOT DELETE
-
 src/FMI_search.o: src/FMI_search.h src/bntseq.h src/read_index_ele.h
 src/FMI_search.o: src/utils.h src/macro.h src/bwa.h src/bwt.h src/sais.h
 src/bandedSWA.o: src/bandedSWA.h src/macro.h

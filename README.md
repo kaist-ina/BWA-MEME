@@ -22,7 +22,7 @@
 - [Citation](#citation)
 ---
 ## When to use BWA-MEME
-- Anyone who use BWA-MEM in CPU-only machine (BWA-MEME requires 38GB of memory for index at minimal mode)
+- Anyone who use BWA-MEM or BWA-MEM2 in CPU-only machine (BWA-MEME requires 38GB of memory for index at minimal mode)
 - Building high-throughput NGS alignment cluster with low cost/throughput. CPU-only alignment can be cheaper than using hardware acceleration (GPU, FPGA) in terms of total cost divided by alignment throughput.
 - Just add single option "-7" to deploy BWA-MEME instead of BWA-MEM2 (BWA-MEME does not change anything, except the speed).
 
@@ -61,7 +61,7 @@ To use the RMI train code, please [install Rust](https://rustup.rs/).
 - Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
-./bwa-mem2 index -a meme -t <num_threads> <input.fasta>
+./bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
 - Training P-RMI learned-index model
 ```sh
@@ -87,10 +87,10 @@ https://ina.kaist.ac.kr/~bwa-meme/
 ### Run alignment and compare SAM output
 ```sh
 # Perform alignment with BWA-MEME, add -7 option
-./bwa-mem2 mem -Y -K 100000000 -t <num_threads> -7 <input.fasta> <input_1.fastq> -o <output_meme.sam>
+./bwa-meme mem -Y -K 100000000 -t <num_threads> -7 <input.fasta> <input_1.fastq> -o <output_meme.sam>
 
-# To verify output with BWA-MEM2
-./bwa-mem2 mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
+# To verify output with BWA-MEM2, without -7 option
+./bwa-meme mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
 
 # Compare output SAM files
 diff <output_mem2.sam> <output_meme.sam>
@@ -101,9 +101,9 @@ diff <output_mem2.sam> <output_meme.sam>
 ### Test scripts and executables are available in the test folder
 
 ## Changing memory requirement for index in BWA-MEME 
-1. Change ```#define MODE ``` number in src/LearnedIndex_seeding.h (set 1 for 38GB index size, 2 for 88GB index size, 3 for 118GB index size)
-2. Recompile the code
-3. Run alignment
+1. Change the Mode variable (42th line) in the BWA-MEME/Makefile.
+2. Recompile the code.
+3. Done. You can check the MODE value promted at the start of program. "[Learned-Config] MODE:".
 
 ## Notes
 
@@ -133,3 +133,10 @@ If you use BWA-MEME, please cite the following [paper](https://academic.oup.com/
 
 ```
 
+<!-- ## Todo
+
+* Support BAM output
+
+* Support Sorting
+
+* Support Markduplicate -->

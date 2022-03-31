@@ -42,7 +42,7 @@ uint64_t proc_freq, tprof[LIM_R][LIM_C], prof[LIM_R];
 
 int usage()
 {
-    fprintf(stderr, "Usage: bwa-mem2 <command> <arguments>\n");
+    fprintf(stderr, "Usage: bwa-meme (bwa-mem2) <command> <arguments>\n");
     fprintf(stderr, "Commands:\n");
     fprintf(stderr, "  index         create index\n");
     fprintf(stderr, "  mem           alignment\n");
@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "* SA compression enabled with xfactor: %d\n", 0x1 << SA_COMPX);
         #endif
         
-        ksprintf(&pg, "@PG\tID:bwa-mem2\tPN:bwa-mem2\tVN:%s\tCL:%s", PACKAGE_VERSION, argv[0]);
+        ksprintf(&pg, "@PG\tID:bwa-mem2\tPN:bwa-meme\tVN:%s\tCL:%s", PACKAGE_VERSION, argv[0]);
 
         for (int i = 1; i < argc; ++i) ksprintf(&pg, " %s", argv[i]);
         ksprintf(&pg, "\n");
@@ -111,7 +111,8 @@ int main(int argc, char* argv[])
         fprintf(stderr, "ERROR: unknown command '%s'\n", argv[1]);
         return 1;
     }
-        
+
+
     fprintf(stderr, "\nImportant parameter settings: \n");
     fprintf(stderr, "\tBATCH_SIZE: %d\n", BATCH_SIZE);
     fprintf(stderr, "\tMAX_SEQ_LEN_REF: %d\n", MAX_SEQ_LEN_REF);

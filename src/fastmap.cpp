@@ -1143,7 +1143,8 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 
 static void usage(const mem_opt_t *opt)
 {
-    fprintf(stderr, "Usage: bwa-mem2 mem [options] <idxbase> <in1.fq> [in2.fq]\n");
+    fprintf(stderr, "Usage: bwa-meme (bwa-mem2) mem [options] <idxbase> <in1.fq> [in2.fq]\n");
+    fprintf(stderr, "\tUse -7 option to deploy bwa-meme\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  Algorithm options:\n");
     fprintf(stderr, "    -o STR        Output SAM file name\n");
@@ -1192,7 +1193,7 @@ static void usage(const mem_opt_t *opt)
     fprintf(stderr, "                 (4 sigma from the mean if absent) and min of the insert size distribution.\n");
     fprintf(stderr, "                 FR orientation only. [inferred]\n");
     fprintf(stderr, "   -Z            Use ERT index for seeding\n");
-    fprintf(stderr, "   -7            Use Learned index for seeding\n");
+    fprintf(stderr, "   -7            Use Learned index for seeding (use BWA-MEME)\n");
     fprintf(stderr, "Note: Please read the man page for detailed description of the command line and options.\n");
 }
 
@@ -1537,7 +1538,7 @@ int main_mem(int argc, char *argv[])
         if (is_o) 
             fclose(aux.fp);
         delete aux.fmi;
-        kclose(ko);
+        // kclose(ko);
         _mm_free(ref_string);
         return 1;
     }
@@ -1566,7 +1567,7 @@ int main_mem(int argc, char *argv[])
                     fclose(aux.fp);             
                 delete aux.fmi;
                 kclose(ko);
-                kclose(ko2);
+                // kclose(ko2);
                 _mm_free(ref_string);
                 return 1;
             }            
