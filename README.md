@@ -40,20 +40,14 @@
 git clone https://github.com/kaist-ina/BWA-MEME.git BWA-MEME
 cd BWA-MEME
 
-# To find out vectorization features supported in your machine
-cat /proc/cpuinfo
-
-# If AVX512BW (512-bit SIMD) is supported
-make clean
-make -j<num_threads> arch=avx512
-
-# If AVX2 (256-bit SIMD) is supported
-make clean
-make -j<num_threads> arch=avx2
-
-# If SSE4.1 (128-bit SIMD) is supported (default)
+# To compile all binary executables. Put the highest number of available vCPU cores
 make -j<num_threads>
+
+# Print version and Mode of compiled binary executable
+./bwa-meme version
+
 ```
+
 ### Training RMI - prerequisites
 To use the RMI train code, please [install Rust](https://rustup.rs/).
 
@@ -101,9 +95,23 @@ diff <output_mem2.sam> <output_meme.sam>
 ### Test scripts and executables are available in the test folder
 
 ## Changing memory requirement for index in BWA-MEME 
-1. Change the Mode variable (42th line) in the BWA-MEME/Makefile.
+```sh
+# You can check the MODE value by running version command
+# mode 1: 38GB in index size
+./bwa-meme_mode1 version
+# mode 2: 88GB in index size
+./bwa-meme_mode2 version
+# mode 3: 118GB in index size, fastest mode
+./bwa-meme  version
+
+# If binary executable does not exist, run below command to compile
+make clean
+make -j<number of threads>
+
+```
+<!-- 1. Change the Mode variable (42th line) in the BWA-MEME/Makefile.
 2. Recompile the code.
-3. Done. You can check the MODE value promted at the start of program. "[Learned-Config] MODE:".
+3. Done. You can check the MODE value promted at the start of program. "[Learned-Config] MODE:". -->
 
 ## Notes
 

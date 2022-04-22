@@ -105,7 +105,15 @@ int main(int argc, char* argv[])
     }
     else if (strcmp(argv[1], "version") == 0)
     {
+
         puts(PACKAGE_VERSION);
+        #if MODE==1
+        puts("MEME mode 1: uses 38GB for index size in runtime");
+        #elif MODE==2
+        puts("MEME mode 2: uses 88GB for index size in runtime");
+        #elif MODE==3
+        puts("MEME mode 3: uses 118GB for index size in runtime");
+        #endif
         return 0;
     } else {
         fprintf(stderr, "ERROR: unknown command '%s'\n", argv[1]);

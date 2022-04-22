@@ -189,14 +189,31 @@ int main(int argc, char *argv[])
 		return 1;
         }
 	strcpy_s(prefix, PATH_MAX, buf);
-	strcat_s(prefix, PATH_MAX, &argv0[base_st]);
+	// strcat_s(prefix, PATH_MAX, &argv0[base_st]);
+	strcat_s(prefix, PATH_MAX, "bwa-meme");
 	//prefix_len = strlen(prefix);
 	simd = x86_simd();
-	if (simd & SIMD_AVX512BW) test_and_launch(argv, prefix, ".avx512bw");
-	if (simd & SIMD_AVX2) test_and_launch(argv, prefix, ".avx2");
-	if (simd & SIMD_AVX) test_and_launch(argv, prefix, ".avx");
-	if (simd & SIMD_SSE4_2) test_and_launch(argv, prefix, ".sse42");
-	if (simd & SIMD_SSE4_1) test_and_launch(argv, prefix, ".sse41");
+
+	#if MODE == 3
+	if (simd & SIMD_AVX512BW) test_and_launch(argv, prefix, "_mode3.avx512bw");
+	if (simd & SIMD_AVX2) test_and_launch(argv, prefix, "_mode3.avx2");
+	if (simd & SIMD_AVX) test_and_launch(argv, prefix, "_mode3.avx");
+	if (simd & SIMD_SSE4_2) test_and_launch(argv, prefix, "_mode3.sse42");
+	if (simd & SIMD_SSE4_1) test_and_launch(argv, prefix, "_mode3.sse41");
+	#elif MODE == 2
+	if (simd & SIMD_AVX512BW) test_and_launch(argv, prefix, "_mode2.avx512bw");
+	if (simd & SIMD_AVX2) test_and_launch(argv, prefix, "_mode2.avx2");
+	if (simd & SIMD_AVX) test_and_launch(argv, prefix, "_mode2.avx");
+	if (simd & SIMD_SSE4_2) test_and_launch(argv, prefix, "_mode2.sse42");
+	if (simd & SIMD_SSE4_1) test_and_launch(argv, prefix, "_mode2.sse41");
+	#elif MODE == 1
+	if (simd & SIMD_AVX512BW) test_and_launch(argv, prefix, "_mode1.avx512bw");
+	if (simd & SIMD_AVX2) test_and_launch(argv, prefix, "_mode1.avx2");
+	if (simd & SIMD_AVX) test_and_launch(argv, prefix, "_mode1.avx");
+	if (simd & SIMD_SSE4_2) test_and_launch(argv, prefix, "_mode1.sse42");
+	if (simd & SIMD_SSE4_1) test_and_launch(argv, prefix, "_mode1.sse41");
+	
+	#endif
 	free(prefix);
 	fprintf(stderr, "ERROR: fail to find the right executable\n");
 	return 2;

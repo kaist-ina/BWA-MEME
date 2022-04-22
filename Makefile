@@ -39,8 +39,9 @@ EXE=		bwa-meme
 # 1: Without 64bit key and ISA, 38GB for index
 # 2: Without ISA, 88GB for index
 # 3: BWA-MEME full, 118GB for index
-MODE=3
-
+ifeq ($(MODE),)
+	MODE=3
+endif
 
 ifeq ($(CXX), icpc)
 	CC= icc
@@ -49,7 +50,7 @@ else ifeq ($(CXX), g++)
 endif		
 ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
-CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 -DMODE=$(MODE) $(MEM_FLAGS) 
+CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
 INCLUDES=   -Isrc -Iext/safestringlib/include 
 LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC) 
 OBJS=		src/fastmap.o src/main.o src/utils.o src/memcpy_bwamem.o src/kthread.o \
@@ -106,24 +107,52 @@ CXXFLAGS+=	-g -O3 -fpermissive -fopenmp $(ARCH_FLAGS) #-Wall ##-xSSE2
 .cpp.o:
 	$(CXX) -c $(CXXFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
-all:$(EXE)
+all:$(EXE) 
 
 multi:
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=sse41    EXE=bwa-meme.sse41    CXX=$(CXX) all
+	$(MAKE) arch=sse41    EXE=bwa-meme_mode1.sse41 MODE=1    CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=sse41    EXE=bwa-meme_mode2.sse41 MODE=2    CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=sse41    EXE=bwa-meme_mode3.sse41 MODE=3    CXX=$(CXX) all
+
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=sse42    EXE=bwa-meme.sse42    CXX=$(CXX) all
+	$(MAKE) arch=sse42    EXE=bwa-meme_mode1.sse42 MODE=1    CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=sse42    EXE=bwa-meme_mode2.sse42 MODE=2    CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=sse42    EXE=bwa-meme_mode3.sse42 MODE=3    CXX=$(CXX) all
+
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx    EXE=bwa-meme.avx    CXX=$(CXX) all
+	$(MAKE) arch=avx    EXE=bwa-meme_mode1.avx  MODE=1  CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx    EXE=bwa-meme_mode2.avx  MODE=2  CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx    EXE=bwa-meme_mode3.avx  MODE=3  CXX=$(CXX) all
+
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx2   EXE=bwa-meme.avx2     CXX=$(CXX) all
+	$(MAKE) arch=avx2   EXE=bwa-meme_mode1.avx2   MODE=1  CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx2   EXE=bwa-meme_mode2.avx2   MODE=2  CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx2   EXE=bwa-meme_mode3.avx2   MODE=3  CXX=$(CXX) all
+	
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
-	$(MAKE) arch=avx512 EXE=bwa-meme.avx512bw CXX=$(CXX) all
-	$(CXX) -Wall -O3 src/runsimd.cpp -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme
+	$(MAKE) arch=avx512 EXE=bwa-meme_mode1.avx512bw MODE=1 CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx512 EXE=bwa-meme_mode2.avx512bw MODE=2 CXX=$(CXX) all
+	rm -f src/*.o $(BWA_LIB);
+	$(MAKE) arch=avx512 EXE=bwa-meme_mode3.avx512bw MODE=3 CXX=$(CXX) all
+
+	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=3 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme
+	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=2 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode2
+	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=1 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode1
+
+$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o 
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
 
 
-$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) $(LIBS) -o $@
 
 $(BWA_LIB):$(OBJS)
 	ar rcs $(BWA_LIB) $(OBJS)
@@ -132,7 +161,7 @@ $(SAFE_STR_LIB):
 	cd ext/safestringlib/ && $(MAKE) clean && $(MAKE) CC=$(CC) directories libsafestring.a
 
 clean:
-	rm -fr src/*.o $(BWA_LIB) $(EXE) bwa-meme.sse41 bwa-meme.sse42 bwa-meme.avx bwa-meme.avx2 bwa-meme.avx512bw
+	rm -fr src/*.o $(BWA_LIB) $(EXE) $(EXE)_mode1 $(EXE)_mode2 bwa-meme*.sse41 bwa-meme*.sse42 bwa-meme*.avx bwa-meme*.avx2 bwa-meme*.avx512bw
 	cd ext/safestringlib/ && $(MAKE) clean
 
 depend:
