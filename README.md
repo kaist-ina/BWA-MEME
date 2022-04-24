@@ -11,10 +11,8 @@
 - [Performance of BWA-MEME](#performance-of-bwa-meme)
 - [Getting Started](#getting-started)
   * [Compile the code](#compile-the-code)
-  * [Training RMI - prerequisites](#training-rmi---prerequisites)
   * [Build index of the reference DNA sequence](#build-index-of-the-reference-dna-sequence)
-  * [(Optional) Reference file download](#reference-file-download)
-  * [(Optional) Download pre-trained P-RMI learned-index model](#-optional--download-pre-trained-p-rmi-learned-index-model)
+  * [Training P-RMI](#training-p-rmi)
   * [Run alignment and compare SAM output](#run-alignment-and-compare-sam-output)
   * [Test scripts and executables are available in the test folder](#test-scripts-and-executables-are-available-in-the-test-folder)
 - [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
@@ -48,17 +46,14 @@ make -j<num_threads>
 ./bwa-meme version
 
 ```
-
-### Training RMI - prerequisites
-To use the RMI train code, please [install Rust](https://rustup.rs/).
-
 ### Build index of the reference DNA sequence
 - Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
 ./bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
-- Training P-RMI learned-index model
+### Training P-RMI
+Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
 ```sh
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
 ./build_rmis_dna.sh <input.fasta>
