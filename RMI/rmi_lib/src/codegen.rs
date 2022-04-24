@@ -1062,35 +1062,177 @@ inline size_t FCLAMP(double inp, double bound) {{
 }
 
 
+fn generate_model(
+    namespace: &str,
+    rmi: TrainedRMI,
+    data_dir: &str,
+    key_type: KeyType
+) -> Result<(), std::io::Error> {
+    // construct the code for the model parameters.
+    let mut layer_params: Vec<LayerParams> = rmi.rmi
+        .iter()
+        .enumerate()
+        .map(|(layer_idx, models)| params_for_layer(layer_idx, models))
+        .collect();
+    
+    let report_last_layer_errors = !rmi.last_layer_max_l1s.is_empty();
+    let report_partial_layer_errors = !rmi.third_layer_max_l1s.is_empty();
+
+    let mut report_lle: Vec<u8> = Vec::new();
+    if report_last_layer_errors && !report_partial_layer_errors {
+        let lle = &rmi.last_layer_max_l1s;
+        if lle.len() > 1 {
+            let old_last = layer_params.pop().unwrap();
+            let new_last = old_last.with_zipped_errors(lle);
+            
+            write!(report_lle, "  *err = ")?;
+
+            let last_layer_output = rmi.rmi[ rmi.rmi.len()-1 ][0].output_type();
+
+            let var_name = match last_layer_output {
+                    ModelDataType::Int => "ipred",
+                    ModelDataType::Float => "fpred",
+                    ModelDataType::Float512 => "f512pred",
+                    ModelDataType::Int128 => "i128pred",
+                    ModelDataType::Int512 => "i512pred"
+            };
+
+            if var_name == "f512pred"{
+                writeln!(report_lle, "param_err[modelIndex];")?;
+            }
+            else{
+                new_last.access_by_ref(&mut report_lle, "modelIndex",
+                                   new_last.params_per_model() - 1)?;
+                writeln!(report_lle, ";")?;
+            }
+            layer_params.push(new_last);
+            
+        } else {
+            write!(report_lle, "  *err = {};", lle[0])?;
+        }
+    }
+
+    if report_last_layer_errors && report_partial_layer_errors {
+        let lle = &rmi.last_layer_max_l1s;
+        let ple = &rmi.third_layer_max_l1s;
+        if lle.len() > 1 {
+            let old_last = layer_params.pop().unwrap();
+            let old_partial = layer_params.pop().unwrap();
+            let new_last = old_last.with_zipped_errors(lle);
+            let new_partial = old_partial.with_zipped_errors(ple);
+            
+            write!(report_lle, "  *err = ")?;
+
+            let last_layer_output = rmi.rmi[ rmi.rmi.len()-1 ][0].output_type();
+
+            let var_name = match last_layer_output {
+                    ModelDataType::Int => "ipred",
+                    ModelDataType::Float => "fpred",
+                    ModelDataType::Float512 => "f512pred",
+                    ModelDataType::Int128 => "i128pred",
+                    ModelDataType::Int512 => "i512pred"
+            };
+
+            if var_name == "f512pred"{
+                writeln!(report_lle, "param_err[modelIndex];")?;
+            }
+            else{
+                new_last.access_by_ref(&mut report_lle, "modelIndex",
+                                   new_last.params_per_model() - 1)?;
+                writeln!(report_lle, ";")?;
+            }
+
+            layer_params.push(new_partial);
+            layer_params.push(new_last);
+            
+        } else {
+            write!(report_lle, "  *err = {};", lle[0])?;
+        }
+    }
+
+    if rmi.cache_fix.is_some() {
+        let cfv: Vec<ModelParam> = rmi.cache_fix.as_ref().unwrap().1.iter()
+            .flat_map(|(mi, offset)| vec![(*mi).into(), (*offset).into()])
+            .collect();
+        let cache_fix_params = LayerParams::new(
+            layer_params.len(), true, 2, cfv
+        );
+
+        layer_params.push(cache_fix_params);
+    }
+
+    trace!("Layer parameters:");
+    for lps in layer_params.iter() {
+        trace!("{}", lps);
+    }
+
+    
+            
+    for (lp_idx, lp) in layer_params.iter().enumerate() {
+        match lp {
+            LayerParams::Constant(idx, _) => {
+                let data_path = Path::new(&data_dir)
+                    .join(format!("{}_{}", namespace, array_name!(idx)));
+                let f = File::create(data_path)
+                    .expect("Could not write data file to RMI directory");
+                let mut bw = BufWriter::new(f);
+                lp.write_to(&mut bw)?; // write to data file
+            },
+            LayerParams::Array(idx, _, _) |
+            LayerParams::MixedArray(idx, _, _) => {
+                let it_is_last_layer = (lp_idx == layer_params.len()-1) ;
+                let current_model_output = rmi.rmi[*idx as usize][0].output_type();
+
+                let data_path = Path::new(&data_dir)
+                    .join(format!("{}_{}", namespace, array_name!(idx)));
+                let f = File::create(data_path)
+                    .expect("Could not write data file to RMI directory");
+                let mut bw = BufWriter::new(f);
+                
+                lp.write_to(&mut bw)?; // write to data file
+            }
+        }
+    }
+    
+    return Result::Ok(());
+}
+
 pub fn output_rmi(namespace: &str,
                   mut trained_model: TrainedRMI,
                   data_dir: &str,
                   key_type: KeyType,
                   include_errors: bool) -> Result<(), std::io::Error> {
     
-    let f1 = File::create(format!("{}.cpp", namespace)).expect("Could not write RMI CPP file");
-    let mut bw1 = BufWriter::new(f1);
+    // let f1 = File::create(format!("{}.cpp", namespace)).expect("Could not write RMI CPP file");
+    // let mut bw1 = BufWriter::new(f1);
     
-    let f2 =
-        File::create(format!("{}_data.h", namespace)).expect("Could not write RMI data file");
-    let mut bw2 = BufWriter::new(f2);
+    // let f2 =
+    //     File::create(format!("{}_data.h", namespace)).expect("Could not write RMI data file");
+    // let mut bw2 = BufWriter::new(f2);
     
-    let f3 = File::create(format!("{}.h", namespace)).expect("Could not write RMI header file");
-    let mut bw3 = BufWriter::new(f3);
+    // let f3 = File::create(format!("{}.h", namespace)).expect("Could not write RMI header file");
+    // let mut bw3 = BufWriter::new(f3);
 
     if !include_errors {
         trained_model.last_layer_max_l1s.clear();
     }
 
-    return generate_code(
-        &mut bw1,
-        &mut bw2,
-        &mut bw3,
+    // return generate_code(
+    //     &mut bw1,
+    //     &mut bw2,
+    //     &mut bw3,
+    //     namespace,
+    //     trained_model,
+    //     data_dir,
+    //     key_type
+    // );
+    return generate_model(
         namespace,
         trained_model,
         data_dir,
         key_type
-    );
+
+    )
         
     
 }

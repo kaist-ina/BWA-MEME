@@ -40,7 +40,8 @@
 git clone https://github.com/kaist-ina/BWA-MEME.git BWA-MEME
 cd BWA-MEME
 
-# To compile all binary executables. Put the highest number of available vCPU cores
+# To compile all binary executables run below command. 
+# Put the highest number of available vCPU cores
 make -j<num_threads>
 
 # Print version and Mode of compiled binary executable
@@ -74,7 +75,7 @@ gunzip human_g1k_v37.fasta.gz
 ```sh
 # We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
 # Two P-RMI model parameter files are required to run BWA-MEME
-https://ina.kaist.ac.kr/~bwa-meme/
+https://web.inalab.net/~bwa-meme/
 ```
 
 

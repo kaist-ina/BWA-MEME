@@ -35,8 +35,8 @@ fn main() {
 
     let matches = App::new("RMI Learner")
         .version("0.1")
-        .author("Ryan Marcus <ryan@ryanmarc.us>")
-        .about("Learns recursive model indexes")
+        .author("Youngmok Jung <tom418@kaist.ac.kr>")
+        .about("Learns recursive model indexes, code adapted from Ryan Marcus <ryan@ryanmarc.us>")
         .arg(Arg::with_name("input")
              .help("Path to input file containing data")
              .index(1).required(true))
