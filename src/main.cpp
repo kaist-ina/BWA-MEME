@@ -32,7 +32,7 @@ Contacts: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@
 #include "main.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "BWA-MEME 2.2"
+#define PACKAGE_VERSION "Identical to BWA-MEM2 2.2"
 #endif
 
 
