@@ -32,7 +32,7 @@ Contacts: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@
 #include "main.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "2.2"
+#define PACKAGE_VERSION "BWA-MEME 2.2"
 #endif
 
 
@@ -107,6 +107,7 @@ int main(int argc, char* argv[])
     {
 
         puts(PACKAGE_VERSION);
+        puts("BWA-MEME version v1.0.2");
         #if MODE==1
         puts("MEME mode 1: uses 38GB for index size in runtime");
         #elif MODE==2

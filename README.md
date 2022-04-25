@@ -43,8 +43,10 @@ cd BWA-MEME
 make -j<num_threads>
 
 # Print version and Mode of compiled binary executable
+# bwa-meme binary autoselects the binary with CPU instruction supported (SSE, AVX2, AVX512 ...)
 ./bwa-meme version
 
+# For bwa-meme with mode 1 or 2 see below
 ```
 ### Build index of the reference DNA sequence
 - Building Suffix array, Inverse suffix array 
@@ -58,26 +60,11 @@ Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
 ./build_rmis_dna.sh <input.fasta>
 ```
-### (Optional) Reference file download
-You can download the reference using the command below.
-```sh
-# Download human_g1k_v37.fasta human genome and decompress it
-wget ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
-gunzip human_g1k_v37.fasta.gz
-```
-
-### (Optional) Download pre-trained P-RMI learned-index model
-```sh
-# We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
-# Two P-RMI model parameter files are required to run BWA-MEME
-https://web.inalab.net/~bwa-meme/
-```
-
 
 ### Run alignment and compare SAM output
 ```sh
 # Perform alignment with BWA-MEME, add -7 option
-./bwa-meme mem -Y -K 100000000 -t <num_threads> -7 <input.fasta> <input_1.fastq> -o <output_meme.sam>
+./bwa-meme mem -7 -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_meme.sam>
 
 # To verify output with BWA-MEM2, without -7 option
 ./bwa-meme mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
@@ -86,9 +73,8 @@ https://web.inalab.net/~bwa-meme/
 diff <output_mem2.sam> <output_meme.sam>
 
 # To diff large SAM files use https://github.com/unhammer/diff-large-files
-
 ```
-### Test scripts and executables are available in the test folder
+### Test scripts and executables are available in the BWA-MEME/test folder
 
 ## Changing memory requirement for index in BWA-MEME 
 ```sh
@@ -114,6 +100,21 @@ make -j<number of threads>
 * BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
 
 * When deploying BWA-MEME with many threads (>72), mimalloc library is recommended to avoid performance drop issue.
+
+### (Optional) Reference file download
+You can download the reference using the command below.
+```sh
+# Download human_g1k_v37.fasta human genome and decompress it
+wget ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
+gunzip human_g1k_v37.fasta.gz
+```
+
+### (Optional) Download pre-trained P-RMI learned-index model
+```sh
+# We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
+# Two P-RMI model parameter files are required to run BWA-MEME
+https://web.inalab.net/~bwa-meme/
+```
 
 ## Citation
 
