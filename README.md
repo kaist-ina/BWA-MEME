@@ -1,4 +1,4 @@
-## BWA-MEME: BWA-MEM emulated with a machine learning approach 
+# BWA-MEME: BWA-MEM emulated with a machine learning approach 
 - BWA-MEME produces identical results as BWA-MEM2 and achieves 1.4x higher alignment throughput.
 - Seeding throughput of BWA-MEME is up to 3.32x higher than BWA-MEM2.
 - BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
@@ -7,17 +7,16 @@
 ---
 
 ## Contents
-- [When to use BWA-MEME](#when-to-use-bwa-meme)
-- [Performance of BWA-MEME](#performance-of-bwa-meme)
-- [Getting Started](#getting-started)
-  * [Compile the code](#compile-the-code)
-  * [Build index of the reference DNA sequence](#build-index-of-the-reference-dna-sequence)
-  * [Training P-RMI](#training-p-rmi)
-  * [Run alignment and compare SAM output](#run-alignment-and-compare-sam-output)
-  * [Test scripts and executables are available in the test folder](#test-scripts-and-executables-are-available-in-the-test-folder)
-- [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
-- [Notes](#notes)
-- [Citation](#citation)
+* [When to use BWA-MEME](#when-to-use-bwa-meme)
+* [Performance of BWA-MEME](#performance-of-bwa-meme)
+* [Getting Started](#getting-started)
+  + [Option 1. Bioconda](#install-option-1-bioconda)
+  + [Option 2. Build locally](#install-option-2-build-locally)
+* [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
+* [Notes](#notes)
+  + [(Optional) Reference file download](#-optional--reference-file-download)
+  + [(Optional) Download pre-trained P-RMI learned-index model](#-optional--download-pre-trained-p-rmi-learned-index-model)
+* [Citation](#citation)
 ---
 ## When to use BWA-MEME
 - Anyone who use BWA-MEM or BWA-MEM2 in CPU-only machine (BWA-MEME requires 38GB of memory for index at minimal mode)
@@ -31,8 +30,49 @@
 #### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
 <img src="https://github.com/kaist-ina/BWA-MEME/blob/dev/images/BWA-MEME-AlignmentResults.png" width="50%" />
 
+---
 ## Getting Started
-### Compile the code
+### Install Option 1. Bioconda
+```sh
+# Install with conda, bwa-meme and the learned-index train script "build_rmis_dna.sh" will be installed
+conda install -c conda-forge -c bioconda bwa-meme
+
+# Print version and Mode of compiled binary executable
+# bwa-meme binary automatically choose the binary based on the SIMD instruction supported (SSE, AVX2, AVX512 ...)
+# Other modes of bwa-meme is available as bwa-meme_mode1 or bwa-meme_mode2
+bwa-meme version
+
+```
+### Build index of the reference DNA sequence
+- Building Suffix array, Inverse suffix array 
+```sh
+# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
+bwa-meme index -a meme -t <num_threads> <input.fasta>
+```
+### Training P-RMI
+Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
+```sh
+# Run code below to train P-RMI, suffix array is required which is generated in index build code
+build_rmis_dna.sh <input.fasta>
+```
+
+### Run alignment and compare SAM output with BWA-MEM2
+```sh
+# Perform alignment with BWA-MEME, add -7 option
+bwa-meme mem -7 -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_meme.sam>
+
+# Below runs alignment with BWA-MEM2, without -7 option
+bwa-meme mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
+
+# Compare output SAM files
+diff <output_mem2.sam> <output_meme.sam>
+
+# To diff large SAM files use https://github.com/unhammer/diff-large-files
+```
+
+---
+### Install Option 2. Build locally
+#### Compile the code
 ```sh
 # Compile from source
 git clone https://github.com/kaist-ina/BWA-MEME.git BWA-MEME
@@ -43,7 +83,7 @@ cd BWA-MEME
 make -j<num_threads>
 
 # Print version and Mode of compiled binary executable
-# bwa-meme binary autoselects the binary with CPU instruction supported (SSE, AVX2, AVX512 ...)
+# bwa-meme binary automatically choose the binary based on the SIMD instruction supported (SSE, AVX2, AVX512 ...)
 ./bwa-meme version
 
 # For bwa-meme with mode 1 or 2 see below
@@ -61,12 +101,12 @@ Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
 ./build_rmis_dna.sh <input.fasta>
 ```
 
-### Run alignment and compare SAM output
+### Run alignment and compare SAM output with BWA-MEM2
 ```sh
 # Perform alignment with BWA-MEME, add -7 option
 ./bwa-meme mem -7 -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_meme.sam>
 
-# To verify output with BWA-MEM2, without -7 option
+# Below runs alignment with BWA-MEM2, without -7 option
 ./bwa-meme mem -Y -K 100000000 -t <num_threads> <input.fasta> <input_1.fastq> -o <output_mem2.sam>
 
 # Compare output SAM files
@@ -74,8 +114,9 @@ diff <output_mem2.sam> <output_meme.sam>
 
 # To diff large SAM files use https://github.com/unhammer/diff-large-files
 ```
-### Test scripts and executables are available in the BWA-MEME/test folder
 
+### Test scripts and executables are available in the BWA-MEME/test folder
+---
 ## Changing memory requirement for index in BWA-MEME 
 ```sh
 # You can check the MODE value by running version command
@@ -91,10 +132,7 @@ make clean
 make -j<number of threads>
 
 ```
-<!-- 1. Change the Mode variable (42th line) in the BWA-MEME/Makefile.
-2. Recompile the code.
-3. Done. You can check the MODE value promted at the start of program. "[Learned-Config] MODE:". -->
-
+---
 ## Notes
 
 * BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
