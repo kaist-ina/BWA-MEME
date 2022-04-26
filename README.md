@@ -50,7 +50,6 @@ bwa-meme version
 bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
 ### Training P-RMI
-Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
 ```sh
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
 build_rmis_dna.sh <input.fasta>
@@ -94,8 +93,8 @@ make -j<num_threads>
 # Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
 ./bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
-### Training P-RMI
-Prerequisites: To use the train code, please [install Rust](https://rustup.rs/).
+### Training P-RMI 
+Prerequisites for building locally: To use the train code, please [install Rust](https://rustup.rs/).
 ```sh
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
 ./build_rmis_dna.sh <input.fasta>
