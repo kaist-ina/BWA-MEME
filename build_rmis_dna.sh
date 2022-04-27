@@ -6,8 +6,8 @@ then
     # To build the command, RMI folder should exist
     if [ ! -d RMI ] 
     then
-        echo "ERROR:"
-        echo BWA-MEME/RMI directory does not exist or run this script in BWA-MEME folder
+        # echo "ERROR:"
+        echo ERROR: BWA-MEME/RMI directory does not exist or run this script in BWA-MEME folder
         exit 1
     fi
 
@@ -22,16 +22,16 @@ then
 fi
 
 if [ -z "$1" ]; then
-    
-    echo "Should give input 
-ex) bash build_rmis_dna.sh ./human.fasta"
+    echo "Usage: build_rmis_dna.sh <reference file>
+    ex) ./build_rmis_dna.sh ./human.fasta"
+    echo "About: RMI training script for BWA-MEME. Training requires about 15 minute with single thread"
     exit 0
 fi
 
 if [ ! -f $1.suffixarray_uint64 ] 
 then
-    echo "ERROR:"
-    echo "suffixarray_uint64 file does not exists in `dirname $1`
+    # echo "ERROR:"
+    echo "ERROR: suffixarray_uint64 file does not exists in `dirname $1`
 Correct the path or build the suffixarray index first with command: bwa-meme index"
     exit 1
 fi

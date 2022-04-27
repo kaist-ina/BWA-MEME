@@ -364,7 +364,7 @@ int bwa_idx_build_Learned_index(const char *fa, const char *prefix, int num_thre
 		// bwaidx_t* bid = bwa_idx_load_from_disk(prefix, BWA_IDX_BNS | BWA_IDX_BWT | BWA_IDX_PAC);
 		// assert(bid != NULL);
 		if (bwa_verbose >= 3) {
-			fprintf(stderr, "[M::%s] Building Learned Index...\n", __func__ );
+			fprintf(stderr, "[M::%s] Building Index for bwa-meme...\n", __func__ );
 		}
 		buildSAandLEP(prefix, num_threads);
 		// bwa_idx_destroy(bid);
