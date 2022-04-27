@@ -46,12 +46,13 @@ bwa-meme version
 ### Build index of the reference DNA sequence
 - Building Suffix array, Inverse suffix array 
 ```sh
-# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
+# Build index (Takes ~3hr for human genome)
 bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
 ### Training P-RMI
 ```sh
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
+# takes about 15 minute for human genome with single thread
 build_rmis_dna.sh <input.fasta>
 ```
 
@@ -90,13 +91,14 @@ make -j<num_threads>
 ### Build index of the reference DNA sequence
 - Building Suffix array, Inverse suffix array 
 ```sh
-# Build index (Takes ~4 hr for human genome with 32 threads. 1 hr for BWT, 3 hr for BWA-MEME)
+# Build index (Takes ~3hr for human genome)
 ./bwa-meme index -a meme -t <num_threads> <input.fasta>
 ```
 ### Training P-RMI 
 Prerequisites for building locally: To use the train code, please [install Rust](https://rustup.rs/).
 ```sh
 # Run code below to train P-RMI, suffix array is required which is generated in index build code
+# takes about 15 minute for human genome with single thread
 ./build_rmis_dna.sh <input.fasta>
 ```
 
