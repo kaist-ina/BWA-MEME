@@ -261,7 +261,7 @@ int bwa_index(int argc, char *argv[]) // the "index" command
 		fprintf(stderr, "Usage:   bwa-meme index [options] <in.fasta>\n\n");
 		fprintf(stderr, "Options: -a STR    BWT construction algorithm: bwtsw, is, rb2, mem2, ert or meme \n");
 		fprintf(stderr, "         -p STR    prefix of the index [same as fasta name]\n");
-		fprintf(stderr, "         -t INT    number of threads for ERT index building [%d]\n", num_threads);
+		fprintf(stderr, "         -t INT    number of threads for MEME index building [%d]\n", num_threads);
 		fprintf(stderr, "         -6        index files named as <in.fasta>.64.* instead of <in.fasta>.* \n");
 		fprintf(stderr, "\n");
 		fprintf(stderr,	"Warning: `-a bwtsw' does not work for short genomes, while `-a is' and\n");
@@ -349,6 +349,7 @@ int bwa_idx_build_Learned_index(const char *fa, const char *prefix, int num_thre
 	int64_t l_pac;
 
 	{ // nucleotide indexing
+		t = clock();
 		gzFile fp = xzopen(fa, "r");
 		// t = clock();
 		// fprintf(stderr, "[bwa_index] Pack FASTA... ");
@@ -366,7 +367,9 @@ int bwa_idx_build_Learned_index(const char *fa, const char *prefix, int num_thre
 		if (bwa_verbose >= 3) {
 			fprintf(stderr, "[M::%s] Building Index for bwa-meme...\n", __func__ );
 		}
+		
 		buildSAandLEP(prefix, num_threads);
+		fprintf(stderr, "Took %.2f sec for index build\n", (float)(clock() - t) / CLOCKS_PER_SEC);
 		// bwa_idx_destroy(bid);
 	}
 	return 0;
