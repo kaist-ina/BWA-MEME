@@ -34,7 +34,9 @@ Contacts: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@
 #ifndef PACKAGE_VERSION
 #define PACKAGE_VERSION "Identical to BWA-MEM2 2.2"
 #endif
-
+#ifndef MEME_PACKAGE_VERSION
+#define MEME_PACKAGE_VERSION "BWA-MEME v1.0.3"
+#endif
 
 // ----------------------------------
 uint64_t proc_freq, tprof[LIM_R][LIM_C], prof[LIM_R];
@@ -107,7 +109,7 @@ int main(int argc, char* argv[])
     {
 
         puts(PACKAGE_VERSION);
-        puts("BWA-MEME version v1.0.2");
+        puts(MEME_PACKAGE_VERSION);
         #if MODE==1
         puts("MEME mode 1: uses 38GB for index size in runtime");
         #elif MODE==2
