@@ -986,8 +986,6 @@ void build_star_index(uint64_t L_MER_SIZE, char** argv){
     FILE *sa_pos_fd;
     uint64_t suffixarray_num;
 
-
-
     sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
         fprintf(stderr, "[calculate_index] Can't open suffix array position index\n.", __func__);
