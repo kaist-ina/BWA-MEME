@@ -360,20 +360,41 @@ int main(int argc, char **argv) {
         // swap 8 bit to match endianess
         fmiSearch->idx->pac[l] = BitReverseTable256[fmiSearch->idx->pac[l]];
     }
+    uint64_t suffixarray_num;
+
+    #if 0
     char sa_file_name[PATH_MAX];
     strcpy_s(sa_file_name, PATH_MAX, argv[1]); 
     strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
-    
     std::ifstream in(sa_file_name, std::ios::binary);
     if (!in.is_open()) {
         fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
         exit(EXIT_FAILURE);
     }
-    uint64_t suffixarray_num;
     in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
     in.close();
-    
-    
+    fprintf(stderr, "number of suffix array:%ld\n.", suffixarray_num);
+    #endif
+    uint64_t allocMem = 402653184;// size of learned index
+
+    char sa_pos_file_name[PATH_MAX];
+    strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]);
+    #if LOADSUFFIX
+    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
+    #else
+    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
+    #endif
+
+    FILE *sa_pos_fd;
+    sa_pos_fd = fopen(sa_pos_file_name, "rb");
+    fseek(sa_pos_fd, 0, SEEK_END); 
+    suffixarray_num = ftell(sa_pos_fd) / SASIZE;
+    rewind(sa_pos_fd);
+
+    fprintf(stderr, "number of suffix array:%ld\n.", suffixarray_num);
+
+    allocMem += SASIZE * suffixarray_num * 1L; 
+
     if (bwa_verbose >= 3) {
         fprintf(stderr, "[M::%s::LEARNED] Reading RMI data to memory\n", __func__);
     }
@@ -389,7 +410,6 @@ int main(int argc, char **argv) {
     strcpy_s(learned_index_param_L1, PATH_MAX, argv[1]); 
     strcat_s(learned_index_param_L1, PATH_MAX, ".suffixarray_uint64_L1_PARAMETERS");
 
-    uint64_t allocMem = 402653184;// size of learned index
     if (!learned_index_load(learned_index_param_l0, learned_index_param_L1,learned_index_param_L2, (double)suffixarray_num)){
         fprintf(stderr, "[M::%s::LEARNED] Can't load learned-index model, read_path:%s.\n", __func__, learned_index_param_L1);
         exit(1);
@@ -427,17 +447,7 @@ int main(int argc, char **argv) {
 #if READ_FROM_FILE
     fprintf(stderr, "[M::%s::LEARNED] Reading Mode\n", __func__);
     
-    char sa_pos_file_name[PATH_MAX];
-    strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]);
-    #if LOADSUFFIX
-    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
-    #else
-    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    #endif
-    allocMem += SASIZE * suffixarray_num * 1L; 
     
-    FILE *sa_pos_fd;
-    sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
         fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index File\n.", __func__);
         exit(1);

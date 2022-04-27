@@ -980,7 +980,25 @@ void build_star_index(uint64_t L_MER_SIZE, char** argv){
     }
     printf("[Build-STARmode] padded ref len = %ld\n", pac_len);
     //build suffix array
+    char sa_pos_file_name[PATH_MAX];
+    strcpy_s(sa_pos_file_name, PATH_MAX, argv[2]);
+    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
+    FILE *sa_pos_fd;
+    uint64_t suffixarray_num;
 
+
+
+    sa_pos_fd = fopen(sa_pos_file_name, "rb");
+    if (sa_pos_fd == NULL) {
+        fprintf(stderr, "[calculate_index] Can't open suffix array position index\n.", __func__);
+        exit(1);
+    }
+    
+    fseek(sa_pos_fd, 0, SEEK_END); 
+    suffixarray_num = ftell(sa_pos_fd) / 5;
+    rewind(sa_pos_fd);
+    
+    #if 0
     char sa_file_name[PATH_MAX];
     strcpy_s(sa_file_name, PATH_MAX, argv[2]);
     strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
@@ -990,10 +1008,11 @@ void build_star_index(uint64_t L_MER_SIZE, char** argv){
         fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
         exit(EXIT_FAILURE);
     }
-    uint64_t suffixarray_num;
+    
     in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
     in.close();
-
+    #endif
+    
     char* suffix_array = (char*) malloc(suffixarray_num* 5);
     index_alloc += suffixarray_num* 5;
     assert_not_null(suffix_array, suffixarray_num* 5, index_alloc);
@@ -1001,20 +1020,9 @@ void build_star_index(uint64_t L_MER_SIZE, char** argv){
 
     printf("[Build-STARmode] Read Suffix array read:%d real:%ld\n", suffixarray_num, pac_len);
     // status = saisxx(reference_seq.c_str(), suffix_array, pac_len);
-    {
-        char sa_pos_file_name[PATH_MAX];
-        strcpy_s(sa_pos_file_name, PATH_MAX, argv[2]);
-        strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-        FILE *sa_pos_fd;
-        sa_pos_fd = fopen(sa_pos_file_name, "rb");
-        if (sa_pos_fd == NULL) {
-            fprintf(stderr, "[calculate_index] Can't open suffix array position index\n.", __func__);
-            exit(1);
-        }
-        err_fread_noeof(suffix_array, sizeof(uint8_t), 5*suffixarray_num, sa_pos_fd);
-        fclose(sa_pos_fd);
-    }
-
+    
+    err_fread_noeof(suffix_array, sizeof(uint8_t), 5*suffixarray_num, sa_pos_fd);
+    fclose(sa_pos_fd);
     /*
     L-MER:        1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
     2^2L in rows [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]

@@ -130,7 +130,7 @@ void pac2nt_(const char *fn_pac, std::string &reference_seq)
 }
 
 
-void buildSAandLEP(char* prefix,  bwaidx_t* bid, int num_threads){
+void buildSAandLEP(char* prefix, int num_threads){
 
     uint64_t startTick;
     int status;

@@ -258,15 +258,15 @@ int bwa_index(int argc, char *argv[]) // the "index" command
 
 	if (optind + 1 > argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   bwa-mem2 index [options] <in.fasta>\n\n");
-		fprintf(stderr, "Options: -a STR    BWT construction algorithm: bwtsw, is, rb2, mem2 or ert\n");
+		fprintf(stderr, "Usage:   bwa-meme index [options] <in.fasta>\n\n");
+		fprintf(stderr, "Options: -a STR    BWT construction algorithm: bwtsw, is, rb2, mem2, ert or meme \n");
 		fprintf(stderr, "         -p STR    prefix of the index [same as fasta name]\n");
 		fprintf(stderr, "         -t INT    number of threads for ERT index building [%d]\n", num_threads);
 		fprintf(stderr, "         -6        index files named as <in.fasta>.64.* instead of <in.fasta>.* \n");
 		fprintf(stderr, "\n");
 		fprintf(stderr,	"Warning: `-a bwtsw' does not work for short genomes, while `-a is' and\n");
 		fprintf(stderr, "         `-a div' do not work not for long genomes.\n\n");
-		fprintf(stderr, "         `-a ert' to build ERT index.\n\n");
+		fprintf(stderr, "         `-a meme' to build bwa-meme index (SA, ISA).\n\n");
 		if (prefix) {
 			free(prefix);
 		}
@@ -349,29 +349,25 @@ int bwa_idx_build_Learned_index(const char *fa, const char *prefix, int num_thre
 	int64_t l_pac;
 
 	{ // nucleotide indexing
-		// gzFile fp = xzopen(fa, "r");
+		gzFile fp = xzopen(fa, "r");
 		// t = clock();
 		// fprintf(stderr, "[bwa_index] Pack FASTA... ");
-		// l_pac = bns_fasta2bntseq(fp, prefix, 1);
+		l_pac = bns_fasta2bntseq(fp, prefix, 1);
 		// fprintf(stderr, "%.2f sec\n", (float)(clock() - t) / CLOCKS_PER_SEC);
-		// err_gzclose(fp);
+		err_gzclose(fp);
 
 		// build_binaryRef(prefix);
 		
-		// FMI_search *fmi = new FMI_search(prefix);
-		// fmi->build_index();
-		// delete fmi;
-
-		bwa_idx_build(fa, prefix, BWTALGO_AUTO, 10000000);
+		// bwa_idx_build(fa, prefix, BWTALGO_AUTO, 10000000);
 
 		// Load BWT index
-		bwaidx_t* bid = bwa_idx_load_from_disk(prefix, BWA_IDX_BNS | BWA_IDX_BWT | BWA_IDX_PAC);
-		assert(bid != NULL);
+		// bwaidx_t* bid = bwa_idx_load_from_disk(prefix, BWA_IDX_BNS | BWA_IDX_BWT | BWA_IDX_PAC);
+		// assert(bid != NULL);
 		if (bwa_verbose >= 3) {
-			fprintf(stderr, "[M::%s] Building Learned Index.. BWT length: %lu  ...\n", __func__, bid->bwt->seq_len );
+			fprintf(stderr, "[M::%s] Building Learned Index...\n", __func__ );
 		}
-		buildSAandLEP( prefix, bid, num_threads);
-		bwa_idx_destroy(bid);
+		buildSAandLEP(prefix, num_threads);
+		// bwa_idx_destroy(bid);
 	}
 	return 0;
 }

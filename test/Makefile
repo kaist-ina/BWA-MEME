@@ -31,7 +31,7 @@
 
 EXE=		fmi_seeding_big_read ert_seeding_big_read  learned_seeding_big_read star_align
 CXX=		g++
-CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw
+CXXFLAGS=	-std=c++17 -g -fpermissive -O3  -fopenmp -mtune=native -mavx512bw -DMODE=3
 
 CPPFLAGS=	-DENABLE_PREFETCH  -DSAIS=1
 INCLUDES=	-I../src  -I../ext/safestringlib/include  

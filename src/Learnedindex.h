@@ -32,7 +32,7 @@
 #include "bntseq.h"
 
 
-void buildSAandLEP( char* prefix,  bwaidx_t* bid, int num_threads);
+void buildSAandLEP( char* prefix,  int num_threads);
 
 
 

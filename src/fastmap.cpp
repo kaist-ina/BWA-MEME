@@ -435,7 +435,29 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     }
 
     allocMem = nthreads * (BATCH_SIZE + 32) * sizeof(int32_t);
-    
+    uint64_t suffixarray_num;
+
+
+    char sa_pos_file_name[PATH_MAX];
+    strcpy_s(sa_pos_file_name, PATH_MAX, idx_prefix); 
+    #if LOADSUFFIX
+    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
+    #else
+    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
+    #endif
+    FILE *sa_pos_fd;
+    sa_pos_fd = fopen(sa_pos_file_name, "rb");
+    if (sa_pos_fd == NULL) {
+        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index (ref.fa.pos_packed or ref.fa.possa_packed)\n.", __func__);
+        exit(1);
+    }
+    if (bwa_verbose >= 3) {
+        fprintf(stderr, "[M::%s::LEARNED] Reading kmer SA index File to memory\n", __func__);
+    }
+    fseek(sa_pos_fd, 0, SEEK_END); 
+    suffixarray_num = ftell(sa_pos_fd) / SASIZE;
+    rewind(sa_pos_fd);
+    #if 0 //remove dependency for suffixarray_uint64 file 
     char sa_file_name[PATH_MAX];
     strcpy_s(sa_file_name, PATH_MAX, idx_prefix); 
     strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
@@ -446,10 +468,10 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
         fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
         exit(EXIT_FAILURE);
     }
-    uint64_t suffixarray_num;
+    
     in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
     in.close();
-    
+    #endif
     /* add reverse-complement binary reference in pac */
     // fmiSearch->idx->pac = (uint8_t*) realloc(fmiSearch->idx->pac, fmiSearch->idx->bns->l_pac/2+1);
     int64_t ll_pac = (aux->fmi->idx->bns->l_pac * 2 + 3) / 4 * 4;
@@ -500,22 +522,7 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     #endif
     // if(1){ // build index on runtime
 #if READ_FROM_FILE
-        char sa_pos_file_name[PATH_MAX];
-        strcpy_s(sa_pos_file_name, PATH_MAX, idx_prefix); 
-    #if LOADSUFFIX
-        strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
-    #else
-        strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    #endif
-        FILE *sa_pos_fd;
-        sa_pos_fd = fopen(sa_pos_file_name, "rb");
-        if (sa_pos_fd == NULL) {
-            fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index\n.", __func__);
-            exit(1);
-        }
-        if (bwa_verbose >= 3) {
-            fprintf(stderr, "[M::%s::LEARNED] Reading kmer SA index File to memory\n", __func__);
-        }
+        
         #if LOADSUFFIX
         err_fread_noeof(w.sa_position, sizeof(uint8_t), 13 * suffixarray_num, sa_pos_fd);
         #else
