@@ -369,7 +369,7 @@ int bwa_idx_build_Learned_index(const char *fa, const char *prefix, int num_thre
 		}
 		
 		buildSAandLEP(prefix, num_threads);
-		fprintf(stderr, "Took %.2f sec for index build\n", (float)(clock() - t) / CLOCKS_PER_SEC);
+		// fprintf(stderr, "Took %.2f sec for index build\n", (float)(clock() - t) / CLOCKS_PER_SEC);
 		// bwa_idx_destroy(bid);
 	}
 	return 0;

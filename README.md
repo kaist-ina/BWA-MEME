@@ -47,7 +47,7 @@ bwa-meme version
 - Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~1hr for human genome)
-# we recommend using 32 threads
+# we recommend using at least 8 threads
 bwa-meme index -a meme <input.fasta> -t <thread number>
 ```
 ### Training P-RMI
@@ -85,6 +85,7 @@ make -j<num_threads>
 
 # Print version and Mode of compiled binary executable
 # bwa-meme binary automatically choose the binary based on the SIMD instruction supported (SSE, AVX2, AVX512 ...)
+# Other modes of bwa-meme is available as bwa-meme_mode1 or bwa-meme_mode2
 ./bwa-meme version
 
 # For bwa-meme with mode 1 or 2 see below
@@ -93,6 +94,7 @@ make -j<num_threads>
 - Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~1hr for human genome)
+# we recommend using 32 threads
 ./bwa-meme index -a meme <input.fasta> -t <thread number>
 ```
 ### Training P-RMI 
@@ -139,7 +141,7 @@ make -j<number of threads>
 
 * BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
 
-* When deploying BWA-MEME with many threads (>72), mimalloc library is recommended to avoid performance drop issue.
+* When deploying BWA-MEME with many threads, mimalloc library is recommended for a better performance.
 
 ### (Optional) Reference file download
 You can download the reference using the command below.

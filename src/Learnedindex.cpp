@@ -143,7 +143,7 @@ void buildSAandLEP(char* prefix, int num_threads){
     char pac_file_name[PATH_MAX];
     strcpy_s(pac_file_name, PATH_MAX, prefix);
     strcat_s(pac_file_name, PATH_MAX, ".pac"); 
-    fprintf(stderr,"[Build-LearnedIndexmode] pac2nt function...\n");
+    fprintf(stderr,"[Build-Index-MEME] pac2nt function...\n");
     pac2nt_(pac_file_name, reference_seq);
     
     
@@ -219,7 +219,7 @@ void buildSAandLEP(char* prefix, int num_threads){
         }
     }
     
-    fprintf(stderr,"[Build-LearnedIndexmode] ref seq len = %ld\n", pac_len);
+    fprintf(stderr,"[Build-Index-MEME] ref seq len = %ld\n", pac_len);
     binary_ref_stream.write(binary_ref_seq, pac_len * sizeof(char));
     binary_ref_stream.close();
     assert(pac_len%2 ==0 );
@@ -228,7 +228,7 @@ void buildSAandLEP(char* prefix, int num_threads){
         binary_ref_seq[i] = 3;  
         reference_seq += "T";
     }
-    fprintf(stderr,"[Build-LearnedIndexmode] padded ref len = %ld\n", pac_len);
+    fprintf(stderr,"[Build-Index-MEME] padded ref len = %ld\n", pac_len);
     //build suffix array
     size = (pac_len + 2) * sizeof(int64_t);
     int64_t *suffix_array=(int64_t *)_mm_malloc(size, 64);
@@ -237,12 +237,12 @@ void buildSAandLEP(char* prefix, int num_threads){
     startTick = __rdtsc();
 
 
-    fprintf(stderr,"[Build-LearnedIndexmode] Building Suffix array with sais library\n");
+    fprintf(stderr,"[Build-Index-MEME] Building Suffix array with sais library\n");
     uint64_t query_k_mer = 32; // fix this to 32, use front 32 character for Learned Index model inference
     clock_t t;
     t = clock();
     status = saisxx(reference_seq.c_str(), suffix_array, pac_len);
-    fprintf(stderr, "%.2f sec\n", (float)(clock() - t) / CLOCKS_PER_SEC);
+    fprintf(stderr, "[Build-Index-MEME] Building Suffix array with sais library took %.2f sec\n", (float)(clock() - t) / CLOCKS_PER_SEC);
     // [    Ref      ][   Ref_complement   ][TTTTTTTTTT...T]
     
     uint64_t total_sa_num = pac_len - padded_t_len;//
@@ -458,7 +458,7 @@ void buildSAandLEP(char* prefix, int num_threads){
 #else // if we are going to build index at runtime, we need to save suffixarray_uint64 and pos_packed file
     uint8_t pos_out_batch[index_build_batch_size*5];
     uint8_t sa_out_batch[index_build_batch_size*8];
-
+    t = clock();
     for (i=0 ; i< pac_len; i += index_build_batch_size){
         int padded_t_flag = 0;
         uint64_t write_num =  i + index_build_batch_size < pac_len ? index_build_batch_size : pac_len - i;
@@ -547,7 +547,8 @@ void buildSAandLEP(char* prefix, int num_threads){
 #endif
     pos_out.close();
     sa_out.close();
-    fprintf(stderr, "build suffix-array ticks = %llu\n", __rdtsc() - startTick);
+    fprintf(stderr, "[Build-Index-MEME] Writing pos_packed file and suffixarray file took %.2f sec\n", (float)(clock() - t) / CLOCKS_PER_SEC);
+    
 
     _mm_free(binary_ref_seq);
     _mm_free(suffix_array);
