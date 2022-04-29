@@ -432,7 +432,7 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
         exit(1);
     }
     if (bwa_verbose >= 3) {
-        fprintf(stderr, "[M::%s::MEME] Reading kmer SA index File to memory\n", __func__);
+        fprintf(stderr, "[M::%s::MEME] Reading Learned-index models into memory\n", __func__);
     }
     fseek(sa_pos_fd, 0, SEEK_END); 
     suffixarray_num = ftell(sa_pos_fd) / 5;

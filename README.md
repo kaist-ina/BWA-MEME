@@ -14,8 +14,8 @@
   + [Option 2. Build locally](#install-option-2-build-locally)
 * [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
 * [Notes](#notes)
-  + [(Optional) Reference file download](#-optional--reference-file-download)
-  + [(Optional) Download pre-trained P-RMI learned-index model](#-optional--download-pre-trained-p-rmi-learned-index-model)
+  + [Reference file download](#reference-file-download)
+  + [Download BWA MEME indices and pretrained P-RMI model](#download-meme-indices-and-pretrained-p-rmi-model)
 * [Citation](#citation)
 ---
 ## When to use BWA-MEME
@@ -44,7 +44,6 @@ bwa-meme version
 
 ```
 ### Build index of the reference DNA sequence
-- Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~1hr for human genome)
 # we recommend using at least 8 threads
@@ -91,7 +90,6 @@ make -j<num_threads>
 # For bwa-meme with mode 1 or 2 see below
 ```
 ### Build index of the reference DNA sequence
-- Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~1hr for human genome)
 # we recommend using 32 threads
@@ -143,19 +141,24 @@ make -j<number of threads>
 
 * When deploying BWA-MEME with many threads, mimalloc library is recommended for a better performance.
 
-### (Optional) Reference file download
+### Reference file download
 You can download the reference using the command below.
 ```sh
 # Download human_g1k_v37.fasta human genome and decompress it
-wget ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
+wget -c ftp://ftp-trace.ncbi.nih.gov/1000genomes/ftp/technical/reference/human_g1k_v37.fasta.gz
 gunzip human_g1k_v37.fasta.gz
+
+# hg38 human reference
+wget -c https://storage.googleapis.com/genomics-public-data/references/hg38/v0/Homo_sapiens_assembly38.fasta
 ```
 
-### (Optional) Download pre-trained P-RMI learned-index model
+### Download MEME indices and pretrained P-RMI model
 ```sh
-# We provide the pretrained models for human_g1k_v37.fasta, please download in the link below.
-# Two P-RMI model parameter files are required to run BWA-MEME
+# We provide the pretrained models and all indices required alignment (for hg37 and hg38 human reference) 
+# you can download in the link below.
 https://web.inalab.net/~bwa-meme/
+
+# Indices of MEME and models should be in the same folder, we follow the prefix-based loading in bwa-mem
 ```
 
 ## Citation
