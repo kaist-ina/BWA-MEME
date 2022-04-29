@@ -47,6 +47,7 @@ bwa-meme version
 - Building Suffix array, Inverse suffix array 
 ```sh
 # Build index (Takes ~1hr for human genome)
+# we recommend using 32 threads
 bwa-meme index -a meme <input.fasta> -t <thread number>
 ```
 ### Training P-RMI

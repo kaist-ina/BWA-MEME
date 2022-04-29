@@ -89,7 +89,7 @@ extern "C" {
 
 
 
-#define READ_FROM_FILE 1  // set 0 to build in runtime, should not be turned on when using compact index
+#define READ_FROM_FILE 0  // set 0 to build in runtime, should not be turned on when using compact index
 
 // Change to test last mile search method or print query length and number of last mile search
 #define CURR_SEARCH_METHOD 1 // 2: exponential 1: P-RMI 0: binary

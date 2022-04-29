@@ -132,7 +132,10 @@ void pac2nt_(const char *fn_pac, std::string &reference_seq)
 
 
 void buildSAandLEP(char* prefix, int num_threads){
-
+    if (num_threads < 4){
+        fprintf(stderr,"Warning: we recommend to use more number of threads(ex. 8, 16 or 32) to build index quickly.\n");
+    }
+    
     uint64_t startTick;
     int status;
     int index_alloc  = 0;
@@ -260,18 +263,8 @@ void buildSAandLEP(char* prefix, int num_threads){
       exit(EXIT_FAILURE);
     }
     sa_out.write(reinterpret_cast<const char*>(&total_sa_num), sizeof(uint64_t));
-
+    
     char pos_filename[PATH_MAX];
-    strcpy_s(pos_filename, PATH_MAX, prefix);
-
-    strcat_s(pos_filename, PATH_MAX, ".possa_packed");
-    std::ofstream possa_out(pos_filename, std::ios_base::trunc | std::ios::binary);
-
-    if (!possa_out.is_open()) {
-      std::cerr << "unable to open " << pos_filename << std::endl;
-      exit(EXIT_FAILURE);
-    }
-
     // open pos_packed
     strcpy_s(pos_filename, PATH_MAX, prefix);
     strcat_s(pos_filename, PATH_MAX, ".pos_packed");
@@ -281,23 +274,27 @@ void buildSAandLEP(char* prefix, int num_threads){
       std::cerr << "unable to open " << pos_filename << std::endl;
       exit(EXIT_FAILURE);
     }
-
-    uint8_t c;
-    bwtintv_t ik, ok[4];
-    uint32_t prevHits;
+    uint64_t index_build_batch_size = 10000;
     uint64_t r;
     uint64_t sa_count=0;
-    fprintf(stderr,"[Build-LearnedIndexmode] Writing index files... should take a while\n");
-    uint64_t index_build_batch_size = 10000;
+    uint64_t cumulative_sa = 0;
 
+#if READ_FROM_FILE//READ_FROM_FILE
+    
+    strcpy_s(pos_filename, PATH_MAX, prefix);
+    strcat_s(pos_filename, PATH_MAX, ".possa_packed");
+    std::ofstream possa_out(pos_filename, std::ios_base::trunc | std::ios::binary);
+
+    if (!possa_out.is_open()) {
+      std::cerr << "unable to open " << pos_filename << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    fprintf(stderr,"[Build-LearnedIndexmode] Writing index files... should take a while\n");
     
     uint8_t *ref_to_sapos = (uint8_t *)_mm_malloc(5*total_sa_num*sizeof(uint8_t) , 64);
-    
     uint8_t pos_out_batch[index_build_batch_size*5];
     uint8_t possa_out_batch[index_build_batch_size*13];
     uint8_t sa_out_batch[index_build_batch_size*8];
-
-    uint64_t cumulative_sa = 0;
     for (i=0 ; i< pac_len; i += index_build_batch_size){
         int padded_t_flag = 0;
         uint64_t write_num =  i + index_build_batch_size < pac_len ? index_build_batch_size : pac_len - i;
@@ -445,7 +442,7 @@ void buildSAandLEP(char* prefix, int num_threads){
         sa_out.write(sa_out_batch, 8*write_num );
 
     }
-    pos_out.close();
+    
     possa_out.close();
     sa_out.close();
 
@@ -458,6 +455,98 @@ void buildSAandLEP(char* prefix, int num_threads){
     ref2sa_stream.close();
     _mm_free(ref_to_sapos);
     // hit_out.close();
+#else // if we are going to build index at runtime, we need to save suffixarray_uint64 and pos_packed file
+    uint8_t pos_out_batch[index_build_batch_size*5];
+    uint8_t sa_out_batch[index_build_batch_size*8];
+
+    for (i=0 ; i< pac_len; i += index_build_batch_size){
+        int padded_t_flag = 0;
+        uint64_t write_num =  i + index_build_batch_size < pac_len ? index_build_batch_size : pac_len - i;
+
+        #pragma omp parallel num_threads(num_threads) shared(i, index_build_batch_size, write_num, pos_out_batch, sa_out_batch)
+        {
+            #pragma omp for schedule(monotonic:dynamic) 
+            for (uint64_t j =i; j < i+write_num; j++){
+                if (padded_t_flag) continue;
+                if ( pac_len - padded_t_len <= suffix_array[j] &&  pac_len > suffix_array[j] ){
+                    #pragma omp atomic
+                    padded_t_flag++; // if there is padded T in current batch, we should process it with single-thread
+                    continue;
+                }
+                // fill in suffix array in packed binary form
+                uint32_t pos_val = suffix_array[j] >>8 ;
+                uint8_t ls_val= suffix_array[j] & 0xff;
+                memcpy(pos_out_batch + (j-i)*5, &pos_val, 4 );
+                memcpy(pos_out_batch + (j-i)*5 + 4, &ls_val, 1 );
+
+                // below code generates the 64-bit suffix to be added to .suffixarray_uint64 and possa_packed file
+                uint64_t binary_suffix_array = 0;
+                for (r =0 ; r < query_k_mer ; r++){
+                    binary_suffix_array = binary_suffix_array << 2;
+                    switch (binary_ref_seq[ (suffix_array[j]+r)%pac_len]){
+                        case 0:
+                            binary_suffix_array = (binary_suffix_array|0);
+                            break;
+                        case 1:
+                            binary_suffix_array = (binary_suffix_array|1);
+                            break;
+                        case 2:
+                            binary_suffix_array = (binary_suffix_array|2);
+                            break;
+                        case 3:
+                            binary_suffix_array = (binary_suffix_array|3);
+                            break;
+                    }
+                }
+
+                memcpy(sa_out_batch + (j-i)*8, &binary_suffix_array, 8 );
+
+            }
+            #pragma omp barrier
+        }
+        uint64_t padded_t_num = 0;
+        if (padded_t_flag){
+            for (uint64_t j =i; j < i+write_num; j++){
+                if ( pac_len - padded_t_len <= suffix_array[j] &&  pac_len > suffix_array[j] ){
+                    padded_t_num ++;
+                    continue;
+                }
+                // fill in suffix array in packed binary form
+                uint32_t pos_val = suffix_array[j] >>8 ;
+                uint8_t ls_val= suffix_array[j] & 0xff;
+                memcpy(pos_out_batch + (j-i-padded_t_num)*5, &pos_val, 4 );
+                memcpy(pos_out_batch + (j-i-padded_t_num)*5 + 4, &ls_val, 1 );
+
+                // below code generates the 64-bit suffix to be added to .suffixarray_uint64 and possa_packed file   
+                uint64_t binary_suffix_array = 0;
+                for (r =0 ; r < query_k_mer ; r++){
+                    binary_suffix_array = binary_suffix_array << 2;
+                    switch (binary_ref_seq[ (suffix_array[j]+r)%pac_len]){
+                        case 0:
+                            binary_suffix_array = (binary_suffix_array|0);
+                            break;
+                        case 1:
+                            binary_suffix_array = (binary_suffix_array|1);
+                            break;
+                        case 2:
+                            binary_suffix_array = (binary_suffix_array|2);
+                            break;
+                        case 3:
+                            binary_suffix_array = (binary_suffix_array|3);
+                            break;
+
+                    }
+                }
+                memcpy(sa_out_batch + (j-i-padded_t_num)*8, &binary_suffix_array, 8 );
+            }
+        }
+        write_num -= padded_t_num;
+        pos_out.write(pos_out_batch, 5*write_num );
+        sa_out.write(sa_out_batch, 8*write_num );
+    }
+#endif
+    pos_out.close();
+    sa_out.close();
     fprintf(stderr, "build suffix-array ticks = %llu\n", __rdtsc() - startTick);
 
     _mm_free(binary_ref_seq);

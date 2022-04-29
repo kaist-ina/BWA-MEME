@@ -24,7 +24,7 @@
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 
-Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@intel.com>.
+Authors: Youngmok Jung <tom418@kaist.ac.kr>; Dongsu Han <dhan.ee@kaist.ac.kr>.
 *****************************************************************************************/
 
 #include<stdio.h>
@@ -312,20 +312,28 @@ int main(int argc, char **argv) {
         // swap 8 bit to match endianess
         fmiSearch->idx->pac[l] = BitReverseTable256[fmiSearch->idx->pac[l]];
     }
-    char sa_file_name[PATH_MAX];
-    strcpy_s(sa_file_name, PATH_MAX, argv[1]); 
-    strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
     
-    std::ifstream in(sa_file_name, std::ios::binary);
-    if (!in.is_open()) {
-        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
-        exit(EXIT_FAILURE);
-    }
     uint64_t suffixarray_num;
-    in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
-    in.close();
     
-    
+    char sa_pos_file_name[PATH_MAX];
+    strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]);
+    #if LOADSUFFIX
+    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
+    #else
+    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
+    #endif
+
+    FILE *sa_pos_fd;
+    sa_pos_fd = fopen(sa_pos_file_name, "rb");
+    if (sa_pos_fd == NULL) {
+        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index File\n.", __func__);
+        exit(1);
+    }
+    fseek(sa_pos_fd, 0, SEEK_END); 
+    suffixarray_num = ftell(sa_pos_fd) / SASIZE;
+    rewind(sa_pos_fd);
+
+
     if (bwa_verbose >= 3) {
         fprintf(stderr, "[M::%s::LEARNED] Reading RMI data to memory\n", __func__);
     }
@@ -341,7 +349,6 @@ int main(int argc, char **argv) {
     strcpy_s(learned_index_param_L1, PATH_MAX, argv[1]); 
     strcat_s(learned_index_param_L1, PATH_MAX, ".suffixarray_uint64_L1_PARAMETERS");
 
-    uint64_t allocMem = 402653184;// size of learned index
     if (!learned_index_load(learned_index_param_l0, learned_index_param_L1,learned_index_param_L2, (double)suffixarray_num)){
         fprintf(stderr, "[M::%s::LEARNED] Can't load learned-index model, read_path:%s.\n", __func__, learned_index_param_L1);
         exit(1);
@@ -370,7 +377,7 @@ int main(int argc, char **argv) {
     /* Reading ref. sequence */
     err_fread_noeof(ref_string, 1, rlen, fr);
     fclose(fr);
-
+    
  // 40 bit (5 byte) of sa_pos, 64bit (8 byte) of Key
     uint8_t* sa_position= (uint8_t*) _mm_malloc( SASIZE * suffixarray_num * sizeof(uint8_t), 64);
     #if MEM_TRADEOFF
@@ -380,17 +387,7 @@ int main(int argc, char **argv) {
 #if READ_FROM_FILE
     fprintf(stderr, "[M::%s::LEARNED] Reading Mode\n", __func__);
     
-    char sa_pos_file_name[PATH_MAX];
-    strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]);
-    #if LOADSUFFIX
-    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
-    #else
-    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    #endif
-    allocMem += SASIZE * suffixarray_num * 1L; 
     
-    FILE *sa_pos_fd;
-    sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
         fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index File\n.", __func__);
         exit(1);
@@ -422,24 +419,25 @@ int main(int argc, char **argv) {
     fclose(sa_pos_fd);
     #endif
 #else
-    fprintf(stderr, "[M::%s::LEARNED] Calculate Mode\n", __func__);
+    fprintf(stderr, "[M::%s::LEARNED] Runtime Index-build Mode\n", __func__);
     if (bwa_verbose >= 3) {
-        fprintf(stderr, "[M::%s::LEARNED] Reading Position data File to memory\n", __func__);
+        fprintf(stderr, "[M::%s::LEARNED] Reading pos_packed File to memory\n", __func__);
     }
-    char sa_pos_file_name[PATH_MAX];
     strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]); 
     strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    FILE *sa_pos_fd;
+    // FILE *sa_pos_fd;
+    fclose(sa_pos_fd);
     sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
         fprintf(stderr, "Can't open suffix array position index File\n.", __func__);
         exit(1);
     }
-    allocMem += SASIZE*suffixarray_num * 8L; 
     assert(sa_position != NULL);
-    err_fread_noeof(sa_position, sizeof(uint8_t), SASIZE*suffixarray_num, sa_pos_fd);
+    double rtime = realtime();
+    err_fread_noeof(sa_position, sizeof(uint8_t), 5*suffixarray_num, sa_pos_fd);
     fclose(sa_pos_fd); 
 
+#if LOADSUFFIX
     if (bwa_verbose >= 3) {
         fprintf(stderr, "[M::%s::LEARNED] Generating Key data and ref2sa data in memory\n", __func__);
     }
@@ -449,7 +447,7 @@ int main(int argc, char **argv) {
     while( start >  index_build_batch_size*8*2 ){
         end = start;
         start = (start >> 1) + 2;
-#pragma omp parallel num_threads(8) shared(rr,start,end, index_build_batch_size)
+#pragma omp parallel num_threads(16) shared(rr,start,end, index_build_batch_size)
 {
 #pragma omp for schedule(monotonic:dynamic) 
         for ( rr=start+1; rr <= end ; rr += index_build_batch_size){
@@ -490,7 +488,9 @@ int main(int argc, char **argv) {
             break;
         }
     }
-
+#else
+    fprintf(stderr, "Loading-index took %.3f sec\n", realtime() - rtime);
+#endif
 
 #endif 
 

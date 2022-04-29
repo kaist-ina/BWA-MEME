@@ -413,65 +413,31 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
         wsize * sizeof(SeqPair) * opt->n_threads * 3;   
     fprintf(stderr, "2. Memory pre-allocation for BSW: %0.4lf MB\n", allocMem/1e6);
 
-    // for (int l=0; l<nthreads; l++)
-    // {
-    //     w.mmc.wsize_mem[l]     = BATCH_MUL * BATCH_SIZE *               readLen;
-    //     w.mmc.matchArray[l]    = (SMEM *) _mm_malloc(w.mmc.wsize_mem[l] * sizeof(SMEM), 64);
-    //     w.mmc.min_intv_ar[l]   = (int32_t *) malloc(w.mmc.wsize_mem[l] * sizeof(int32_t));
-    //     w.mmc.query_pos_ar[l]  = (int16_t *) malloc(w.mmc.wsize_mem[l] * sizeof(int16_t));
-    //     w.mmc.enc_qdb[l]       = (uint8_t *) malloc(w.mmc.wsize_mem[l] * sizeof(uint8_t));
-    //     w.mmc.rid[l]           = (int32_t *) malloc(w.mmc.wsize_mem[l] * sizeof(int32_t));
-    //     w.mmc.lim[l]           = (int32_t *) _mm_malloc((BATCH_SIZE + 32) * sizeof(int32_t), 64); // candidate not for reallocation, deferred for next round of changes.
-    // }
-
-    // allocMem = nthreads * BATCH_MUL * BATCH_SIZE * readLen * sizeof(SMEM) +
-    //     nthreads * BATCH_MUL * BATCH_SIZE * readLen *sizeof(int32_t) +
-    //     nthreads * BATCH_MUL * BATCH_SIZE * readLen *sizeof(int16_t) +
-    //     nthreads * BATCH_MUL * BATCH_SIZE * readLen *sizeof(int32_t) +
-    //     nthreads * (BATCH_SIZE + 32) * sizeof(int32_t);
     for (int l=0; l<nthreads; l++)
     {
-        w.mmc.lim[l]           = (int32_t *) _mm_malloc((BATCH_SIZE + 32) * sizeof(int32_t), 64); // candidate not for reallocation, deferred for next round of changes.
+        w.mmc.lim[l] = (int32_t *) _mm_malloc((BATCH_SIZE + 32) * sizeof(int32_t), 64); // candidate not for reallocation, deferred for next round of changes.
     }
 
     allocMem = nthreads * (BATCH_SIZE + 32) * sizeof(int32_t);
     uint64_t suffixarray_num;
-
+    double rtime = realtime();
 
     char sa_pos_file_name[PATH_MAX];
     strcpy_s(sa_pos_file_name, PATH_MAX, idx_prefix); 
-    #if LOADSUFFIX
-    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
-    #else
     strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    #endif
     FILE *sa_pos_fd;
     sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
-        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index (ref.fa.pos_packed or ref.fa.possa_packed)\n.", __func__);
+        fprintf(stderr, "[M::%s::MEME] Can't open suffix array position index (ref.fa.pos_packed or ref.fa.possa_packed)\n.", __func__);
         exit(1);
     }
     if (bwa_verbose >= 3) {
-        fprintf(stderr, "[M::%s::LEARNED] Reading kmer SA index File to memory\n", __func__);
+        fprintf(stderr, "[M::%s::MEME] Reading kmer SA index File to memory\n", __func__);
     }
     fseek(sa_pos_fd, 0, SEEK_END); 
-    suffixarray_num = ftell(sa_pos_fd) / SASIZE;
+    suffixarray_num = ftell(sa_pos_fd) / 5;
     rewind(sa_pos_fd);
-    #if 0 //remove dependency for suffixarray_uint64 file 
-    char sa_file_name[PATH_MAX];
-    strcpy_s(sa_file_name, PATH_MAX, idx_prefix); 
-    strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
-
-
-    std::ifstream in(sa_file_name, std::ios::binary);
-    if (!in.is_open()) {
-        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
-        exit(EXIT_FAILURE);
-    }
     
-    in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
-    in.close();
-    #endif
     /* add reverse-complement binary reference in pac */
     // fmiSearch->idx->pac = (uint8_t*) realloc(fmiSearch->idx->pac, fmiSearch->idx->bns->l_pac/2+1);
     int64_t ll_pac = (aux->fmi->idx->bns->l_pac * 2 + 3) / 4 * 4;
@@ -503,9 +469,10 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     strcat_s(learned_index_param_partial, PATH_MAX, ".suffixarray_uint64_L2_PARAMETERS");
     allocMem += 402653184;// size of learned index
     if (!learned_index_load(learned_index_param_l0, learned_index_param, learned_index_param_partial, (double)suffixarray_num)){
-        fprintf(stderr, "[M::%s::LEARNED] Can't load learned-index model, read_path:%s\n.", __func__, learned_index_param);
+        fprintf(stderr, "[M::%s::MEME] Can't load learned-index model, read_path:%s\n.", __func__, learned_index_param);
         exit(1);
     }
+    fprintf(stderr, "[M::%s::MEME] Loading RMI model and Pac reference file took %.3f sec\n", __func__, realtime() - rtime);
     #if LOADSUFFIX
         w.sa_position = (uint8_t*) _mm_malloc( 13 * suffixarray_num * sizeof(uint8_t), 64);
         allocMem = 13 * suffixarray_num * 1L; 
@@ -520,9 +487,15 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     allocMem = suffixarray_num*5 * 1L;
     assert(w.ref2sa != NULL);
     #endif
-    // if(1){ // build index on runtime
 #if READ_FROM_FILE
-        
+        strcpy_s(sa_pos_file_name, PATH_MAX, idx_prefix); 
+        #if LOADSUFFIX
+        strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
+        #else
+        strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
+        #endif
+        fclose(sa_pos_fd);
+        sa_pos_fd = fopen(sa_pos_file_name, "rb");
         #if LOADSUFFIX
         err_fread_noeof(w.sa_position, sizeof(uint8_t), 13 * suffixarray_num, sa_pos_fd);
         #else
@@ -537,35 +510,41 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
         FILE *ref2sa_fd;
         ref2sa_fd = fopen(ref2sa_file_name, "rb");
         if (ref2sa_fd == NULL) {
-            fprintf(stderr, "[M::%s::LEARNED] Can't open ref2sa index File\n.", __func__);
+            fprintf(stderr, "[M::%s::MEME] Can't open ref2sa index File\n.", __func__);
             exit(1);
         }
         if (bwa_verbose >= 3) {
-            fprintf(stderr, "[M::%s::LEARNED] Reading ref2sa index File to memory\n", __func__);
+            fprintf(stderr, "[M::%s::MEME] Reading ref2sa index File to memory\n", __func__);
         }
         err_fread_noeof(w.ref2sa, sizeof(uint8_t), 5*suffixarray_num, ref2sa_fd);
         fclose(ref2sa_fd);
     #endif
 #else
-        char sa_pos_file_name[PATH_MAX];
-        strcpy_s(sa_pos_file_name, PATH_MAX,idx_prefix); 
-        strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-        FILE *sa_pos_fd;
-        sa_pos_fd = fopen(sa_pos_file_name, "rb");
+        // sa_pos_fd = fopen(sa_pos_file_name, "rb");
         if (sa_pos_fd == NULL) {
-            fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array position index\n.", __func__);
+            fprintf(stderr, "[M::%s::MEME] Can't open suffix array '.pos_packed' file\n.", __func__);
             exit(1);
         }
         assert(w.sa_position != NULL);
         if (bwa_verbose >= 3) {
-            fprintf(stderr, "[M::%s::LEARNED] Reading suffix array position into memory\n", __func__);
+            fprintf(stderr, "[M::%s::MEME] Reading suffix array into memory\n", __func__);
         }
         err_fread_noeof(w.sa_position, sizeof(uint8_t), 5*suffixarray_num, sa_pos_fd);
         fclose(sa_pos_fd);
-        if (bwa_verbose >= 3) {
-            fprintf(stderr, "[M::%s::LEARNED] Generating Key data and ref2sa data in memory\n", __func__);
-        }
+
         
+    #if LOADSUFFIX
+        fprintf(stderr, "[M::%s::MEME] Loading pos_packed file took %.3f sec\n", __func__, realtime() - rtime);
+        #if MEM_TRADEOFF
+        if (bwa_verbose >= 3) {
+            fprintf(stderr, "[M::%s::MEME] Generating SA, 64-bit Suffix and ISA in memory\n", __func__);
+        }
+        #else
+        if (bwa_verbose >= 3) {
+            fprintf(stderr, "[M::%s::MEME] Generating SA and 64-bit Suffix in memory\n", __func__);
+        }
+        #endif
+        rtime = realtime();
         uint64_t index_build_batch_size = 256;
         uint64_t rr,end, start = suffixarray_num-1;
         uint64_t use_thread= std::max(8,nthreads);
@@ -585,6 +564,12 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
                     
                     uint64_t sa_pos_val = *(uint32_t*)(w.sa_position+idx*5);
                     sa_pos_val = sa_pos_val <<8 | w.sa_position[idx*5+4];
+                    
+                    // uint64_t pre_idx = idx + 10;
+                    // uint64_t prefetch_sa_pos_val = *(uint32_t*)(w.sa_position+pre_idx*5);
+                    // prefetch_sa_pos_val = prefetch_sa_pos_val <<8 | w.sa_position[pre_idx*5+4];
+                    // _mm_prefetch(w.rc_pac+ (prefetch_sa_pos_val>>2), _MM_HINT_NTA);
+
                     #if LOADSUFFIX
                     *(uint64_t*)(w.sa_position + idx * 13 + 5) = get_key_of_ref(w.rc_pac,sa_pos_val, suffixarray_num - sa_pos_val );
                     #else
@@ -624,6 +609,10 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
                 break;
             }
         }
+    fprintf(stderr, "[M::%s::MEME] Runtime-build-index took %.3f sec\n", __func__, realtime() - rtime);
+#else // end of load suffix, skip runtime build for mode 1
+    fprintf(stderr, "[M::%s::MEME] Loading-index took %.3f sec\n", __func__ ,realtime() - rtime);
+#endif
 #endif
 
     // loading end

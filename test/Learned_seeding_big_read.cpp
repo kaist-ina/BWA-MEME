@@ -24,7 +24,7 @@
    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
 
-Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@intel.com>.
+Authors: Youngmok Jung <tom418@kaist.ac.kr>; Dongsu Han <dhan.ee@kaist.ac.kr>.
 *****************************************************************************************/
 
 #include<stdio.h>
@@ -479,24 +479,26 @@ int main(int argc, char **argv) {
     fclose(sa_pos_fd);
     #endif
 #else
-    fprintf(stderr, "[M::%s::LEARNED] Calculate Mode\n", __func__);
+    fprintf(stderr, "[M::%s::LEARNED] Runtime Index-build Mode\n", __func__);
     if (bwa_verbose >= 3) {
-        fprintf(stderr, "[M::%s::LEARNED] Reading Position data File to memory\n", __func__);
+        fprintf(stderr, "[M::%s::LEARNED] Reading pos_packed File to memory\n", __func__);
     }
-    char sa_pos_file_name[PATH_MAX];
     strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]); 
     strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    FILE *sa_pos_fd;
+    // FILE *sa_pos_fd;
+    fclose(sa_pos_fd);
     sa_pos_fd = fopen(sa_pos_file_name, "rb");
     if (sa_pos_fd == NULL) {
         fprintf(stderr, "Can't open suffix array position index File\n.", __func__);
         exit(1);
     }
-    allocMem += SASIZE*suffixarray_num * 8L; 
+    allocMem += 5*suffixarray_num * 8L; 
     assert(sa_position != NULL);
-    err_fread_noeof(sa_position, sizeof(uint8_t), SASIZE*suffixarray_num, sa_pos_fd);
+    double rtime = realtime();
+    err_fread_noeof(sa_position, sizeof(uint8_t), 5*suffixarray_num, sa_pos_fd);
     fclose(sa_pos_fd); 
 
+#if LOADSUFFIX
     if (bwa_verbose >= 3) {
         fprintf(stderr, "[M::%s::LEARNED] Generating Key data and ref2sa data in memory\n", __func__);
     }
@@ -506,7 +508,7 @@ int main(int argc, char **argv) {
     while( start >  index_build_batch_size*8*2 ){
         end = start;
         start = (start >> 1) + 2;
-#pragma omp parallel num_threads(8) shared(rr,start,end, index_build_batch_size)
+#pragma omp parallel num_threads(16) shared(rr,start,end, index_build_batch_size)
 {
 #pragma omp for schedule(monotonic:dynamic) 
         for ( rr=start+1; rr <= end ; rr += index_build_batch_size){
@@ -547,7 +549,9 @@ int main(int argc, char **argv) {
             break;
         }
     }
-
+#else
+    fprintf(stderr, "Loading-index took %.3f sec\n", realtime() - rtime);
+#endif
 
 #endif 
 
