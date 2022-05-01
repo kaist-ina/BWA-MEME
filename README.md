@@ -164,7 +164,7 @@ https://web.inalab.net/~bwa-meme/
 ## Citation
 
 If you use BWA-MEME, please cite the following [paper](https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btac137/6543607)
-> **Youngmok Jung, Dongsu Han, BWA-MEME: BWA-MEM emulated with a machine learning approach, Bioinformatics, 2022;, btac137, https://doi.org/10.1093/bioinformatics/btac137**
+> **Youngmok Jung, Dongsu Han, BWA-MEME: BWA-MEM emulated with a machine learning approach, Bioinformatics, Volume 38, Issue 9, 1 May 2022, Pages 2404–2413, https://doi.org/10.1093/bioinformatics/btac137**
 
 
 ```
