@@ -172,13 +172,15 @@ If you use BWA-MEME, please cite the following [paper](https://academic.oup.com/
     author = {Jung, Youngmok and Han, Dongsu},
     title = "{BWA-MEME: BWA-MEM emulated with a machine learning approach}",
     journal = {Bioinformatics},
+    volume = {38},
+    number = {9},
+    pages = {2404-2413},
     year = {2022},
     month = {03},
     issn = {1367-4803},
     doi = {10.1093/bioinformatics/btac137},
     url = {https://doi.org/10.1093/bioinformatics/btac137},
-    note = {btac137},
-    eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btac137/42752427/btac137.pdf},
+    eprint = {https://academic.oup.com/bioinformatics/article-pdf/38/9/2404/43480985/btac137.pdf},
 }
 
 ```
