@@ -54,7 +54,7 @@ ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
 ifeq ($(USE_MIMALLOC), 1)
-	MIMALLOC_LIB = out/mimalloc/libmimalloc.a
+	MIMALLOC_LIB = build/mimalloc/libmimalloc.a
 	CXXFLAGS += -Imimalloc/include
 	LDFLAGS+= -Wl,-whole-archive $(MIMALLOC_LIB) -Wl,-no-whole-archive
 endif
@@ -156,14 +156,13 @@ multi:
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=2 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode2
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=1 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode1
 
-$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o $(MIMALLOC_LIB)
+$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o 
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
 
 $(MIMALLOC_LIB):
-	mkdir -p out/mimalloc
-	#cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc
-	cd out/mimalloc; cmake ../../mimalloc; cd ../..
-	$(MAKE) -C out/mimalloc mimalloc-static
+	mkdir -p build/mimalloc
+	cd build/mimalloc; cmake ../../mimalloc; cd ../..
+	$(MAKE) -C build/mimalloc mimalloc-static
 
 
 $(BWA_LIB):$(OBJS)
@@ -174,7 +173,7 @@ $(SAFE_STR_LIB):
 
 clean:
 	rm -fr src/*.o $(BWA_LIB) $(EXE) $(EXE)_mode1 $(EXE)_mode2 bwa-meme*.sse41 bwa-meme*.sse42 bwa-meme*.avx bwa-meme*.avx2 bwa-meme*.avx512bw
-	rm -r out/mimalloc
+
 	cd ext/safestringlib/ && $(MAKE) clean
 
 depend:
