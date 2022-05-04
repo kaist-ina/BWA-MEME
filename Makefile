@@ -161,7 +161,8 @@ $(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o $(MIMALLOC_LIB)
 
 $(MIMALLOC_LIB):
 	mkdir -p out/mimalloc
-	cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc
+	#cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc
+	cd out/mimalloc; cmake ../../mimalloc
 	$(MAKE) -C out/mimalloc mimalloc-static
 
 
@@ -173,6 +174,7 @@ $(SAFE_STR_LIB):
 
 clean:
 	rm -fr src/*.o $(BWA_LIB) $(EXE) $(EXE)_mode1 $(EXE)_mode2 bwa-meme*.sse41 bwa-meme*.sse42 bwa-meme*.avx bwa-meme*.avx2 bwa-meme*.avx512bw
+	rm -r out/mimalloc
 	cd ext/safestringlib/ && $(MAKE) clean
 
 depend:
