@@ -162,7 +162,7 @@ $(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o $(MIMALLOC_LIB)
 $(MIMALLOC_LIB):
 	mkdir -p out/mimalloc
 	#cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc
-	cd out/mimalloc; cmake ../../mimalloc
+	cd out/mimalloc; cmake ../../mimalloc; cd ../..
 	$(MAKE) -C out/mimalloc mimalloc-static
 
 
