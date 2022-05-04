@@ -55,7 +55,7 @@ MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
 ifeq ($(USE_MIMALLOC), 1)
 	MIMALLOC_LIB = build/mimalloc/libmimalloc.a
-	CXXFLAGS += -Imimalloc/include
+	#CXXFLAGS += -Imimalloc/include
 	LDFLAGS+= -Wl,-whole-archive $(MIMALLOC_LIB) -Wl,-no-whole-archive
 endif
 INCLUDES=   -Isrc -Iext/safestringlib/include 
