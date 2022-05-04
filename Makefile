@@ -35,6 +35,8 @@ endif
 EXE=		bwa-meme
 #CXX=		icpc
 
+USE_MIMALLOC=1
+
 # BWA-MEME Mode
 # 1: Without 64bit key and ISA, 38GB for index
 # 2: Without ISA, 88GB for index
@@ -51,6 +53,11 @@ endif
 ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
+ifeq ($(USE_MIMALLOC), 1)
+	MIMALLOC_LIB = out/mimalloc/libmimalloc.a
+	CXXFLAGS += -Imimalloc/include
+	LDFLAGS+= -Wl,-whole-archive $(MIMALLOC_LIB) -Wl,-no-whole-archive
+endif
 INCLUDES=   -Isrc -Iext/safestringlib/include 
 LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC) 
 OBJS=		src/fastmap.o src/main.o src/utils.o src/memcpy_bwamem.o src/kthread.o \
@@ -137,7 +144,7 @@ multi:
 	$(MAKE) arch=avx2   EXE=bwa-meme_mode2.avx2   MODE=2  CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB);
 	$(MAKE) arch=avx2   EXE=bwa-meme_mode3.avx2   MODE=3  CXX=$(CXX) all
-	
+
 	rm -f src/*.o $(BWA_LIB); cd ext/safestringlib/ && $(MAKE) clean;
 	$(MAKE) arch=avx512 EXE=bwa-meme_mode1.avx512bw MODE=1 CXX=$(CXX) all
 	rm -f src/*.o $(BWA_LIB);
@@ -149,9 +156,12 @@ multi:
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=2 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode2
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=1 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode1
 
-$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o 
+$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o $(MIMALLOC_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
-
+$(MIMALLOC_LIB):
+	mkdir -p out/mimalloc
+	(cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc)
+	$(MAKE) -C out/mimalloc mimalloc-static
 
 
 $(BWA_LIB):$(OBJS)
