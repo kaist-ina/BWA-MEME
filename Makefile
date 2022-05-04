@@ -158,9 +158,10 @@ multi:
 
 $(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o $(MIMALLOC_LIB)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
+
 $(MIMALLOC_LIB):
 	mkdir -p out/mimalloc
-	(cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc)
+	cd out/mimalloc; CFLAGS=-DMI_USE_ENVIRON=0 cmake -G'Unix Makefiles' ../../mimalloc
 	$(MAKE) -C out/mimalloc mimalloc-static
 
 
