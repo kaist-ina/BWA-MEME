@@ -35,7 +35,7 @@ endif
 EXE=		bwa-meme
 #CXX=		icpc
 
-USE_MIMALLOC=0
+USE_MIMALLOC=1
 
 # BWA-MEME Mode
 # 1: Without 64bit key and ISA, 38GB for index
@@ -53,13 +53,15 @@ endif
 ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
+
+INCLUDES=   -Isrc -Iext/safestringlib/include 
+LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC)
+
 ifeq ($(USE_MIMALLOC), 1)
 	MIMALLOC_LIB = build/mimalloc/libmimalloc.a
-	#CXXFLAGS += -Imimalloc/include
-	LDFLAGS+= -Wl,-whole-archive $(MIMALLOC_LIB) -Wl,-no-whole-archive
+	LIBS+= -Imimalloc/include -Wl,-whole-archive $(MIMALLOC_LIB) -Wl,-no-whole-archive -lrt
 endif
-INCLUDES=   -Isrc -Iext/safestringlib/include 
-LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC) 
+
 OBJS=		src/fastmap.o src/main.o src/utils.o src/memcpy_bwamem.o src/kthread.o \
 			src/kstring.o src/ksw.o src/bwt.o src/ertindex.o src/Learnedindex.o src/bntseq.o src/bwamem.o src/ertseeding.o src/LearnedIndex_seeding.o src/profiling.o src/bandedSWA.o \
 			src/FMI_search.o src/read_index_ele.o src/bwamem_pair.o src/kswv.o src/bwa.o \
@@ -156,8 +158,8 @@ multi:
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=2 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode2
 	$(CXX) -Wall -O3 src/runsimd.cpp -DMODE=1 -Iext/safestringlib/include -Lext/safestringlib/ -lsafestring $(STATIC_GCC) -o bwa-meme_mode1
 
-$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) src/main.o 
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
+$(EXE):$(BWA_LIB) $(SAFE_STR_LIB) $(MIMALLOC_LIB) src/main.o 
+	$(CXX) $(CXXFLAGS)  src/main.o $(BWA_LIB) -DMODE=$(MODE) $(LIBS) -o $@
 
 $(MIMALLOC_LIB):
 	mkdir -p build/mimalloc
@@ -173,7 +175,7 @@ $(SAFE_STR_LIB):
 
 clean:
 	rm -fr src/*.o $(BWA_LIB) $(EXE) $(EXE)_mode1 $(EXE)_mode2 bwa-meme*.sse41 bwa-meme*.sse42 bwa-meme*.avx bwa-meme*.avx2 bwa-meme*.avx512bw
-
+	rm -r build
 	cd ext/safestringlib/ && $(MAKE) clean
 
 depend:
