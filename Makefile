@@ -35,7 +35,7 @@ endif
 EXE=		bwa-meme
 #CXX=		icpc
 
-USE_MIMALLOC=1
+USE_MIMALLOC=0
 
 # BWA-MEME Mode
 # 1: Without 64bit key and ISA, 38GB for index
