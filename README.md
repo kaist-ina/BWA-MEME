@@ -14,8 +14,9 @@
   + [Option 2. Build locally](#install-option-2-build-locally)
 * [Changing memory requirement for index in BWA-MEME](#changing-memory-requirement-for-index-in-bwa-meme)
 * [Notes](#notes)
-  + [Reference file download](#reference-file-download)
+  + [Building pipeline with Samtools](#building-pipeline-with-samtools)
   + [Download BWA MEME indices and pretrained P-RMI model](#download-meme-indices-and-pretrained-p-rmi-model)
+  + [Reference file download](#reference-file-download)
 * [Citation](#citation)
 ---
 ## When to use BWA-MEME
@@ -139,7 +140,16 @@ make -j<number of threads>
 
 * BWA-MEME requires at least 64 GB RAM (with minimal acceleration BWA-MEME requires 38GB of memory). For WGS runs on human genome (>32 threads) with full acceleration of BWA-MEME, it is recommended to have 140-192 GB RAM.
 
-* When deploying BWA-MEME with many threads, mimalloc library is recommended for a better performance.
+* When deploying BWA-MEME with many threads, mimalloc library is recommended for a better performance (Enabled at default).
+
+### Building pipeline with Samtools
+Credits to @keiranmraine, see issue [#10](../../issues/10)
+
+- Due to increased alignment throughput, given enough threads the bottleneck moves from `alignment` to `Samtools sorting`. As a result BWA-MEME might require additional pipeline modification (not a simple drop-in replacement)
+- While existing pipeline might be still faster (reported in issue [#10](../../issues/10)), CPU can be wasted.
+- To reduce the CPU waste, you might want to use `mbuffer` in the pipeline or write alignment outputs to a file with fast compression.
+- We will investigate a faster way to incorporate BWA-MEME and `Samtools sorting`
+
 
 ### Reference file download
 You can download the reference using the command below.
