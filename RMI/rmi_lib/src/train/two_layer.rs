@@ -1940,6 +1940,15 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
     let final_third_errors = third_layer_max_l1s.into_iter()
          .map(|(_n, err)| err).collect();
 
+    let mut rmi;
+    if third_layer_num > 0 {
+        rmi = vec![vec![top_model], partial_3rd_models, sec_models];
+    }
+    else{
+        let dummy_model = train_model("pwl", &md_container);
+        rmi = vec![vec![top_model],vec![dummy_model], sec_models];
+    }
+
     return TrainedRMI {
         num_rmi_rows: md_container.len(),
         num_data_rows: md_container.len(),
@@ -1951,7 +1960,7 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
         model_max_log2_error,
         last_layer_max_l1s: final_errors,
         third_layer_max_l1s: final_third_errors,
-        rmi: vec![vec![top_model], partial_3rd_models, sec_models],
+        rmi: rmi,
         models: format!("{},{},{}", layer1_model, layer3_model, layer2_model),
         branching_factor: num_leaf_models,
         cache_fix: None,
