@@ -42,12 +42,15 @@ function build_rmi_set() {
     DIR_NAME=`dirname $1`
     
     shift 1
-    if  ! command -v bwa-meme-train-prmi &> /dev/null 
+    if  command -v RMI/target/release/bwa-meme-train-prmi &> /dev/null 
     then
         # RMI/target/release/bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 1024
-	    RMI/target/release/bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 268435456
+	RMI/target/release/bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 268435456
+    elif command -v bwa-meme-train-prmi &> /dev/null 
+    then
+	bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 268435456
     else
-        bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 268435456
+        echo ERROR: BWA-MEME/RMI directory does not exist or run this script in BWA-MEME folder
     fi
 }
 
