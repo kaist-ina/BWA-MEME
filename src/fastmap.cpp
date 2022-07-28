@@ -442,7 +442,8 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     // fmiSearch->idx->pac = (uint8_t*) realloc(fmiSearch->idx->pac, fmiSearch->idx->bns->l_pac/2+1);
     int64_t ll_pac = (aux->fmi->idx->bns->l_pac * 2 + 3) / 4 * 4;
     w.rc_pac = (uint8_t*) malloc(ll_pac/4);
-    memset_s(w.rc_pac + (aux->fmi->idx->bns->l_pac+3)/4, (ll_pac - (aux->fmi->idx->bns->l_pac+3)/4*4) / 4, 0);
+    // memset_s(w.rc_pac + (aux->fmi->idx->bns->l_pac+3)/4, (ll_pac - (aux->fmi->idx->bns->l_pac+3)/4*4) / 4, 0);
+    memset_s(w.rc_pac , ll_pac / 4, 0);
     // for (int64_t l = aux->fmi->idx->bns->l_pac - 1; l >= 0; --l, ++aux.fmi->idx->bns->l_pac){
     for (int64_t l=0; l<aux->fmi->idx->bns->l_pac;l++){
         _set_pac(w.rc_pac, l , _get_pac(aux->fmi->idx->pac, l));
@@ -1105,6 +1106,7 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
         }
         free(w.l_smems);
         free(w.hits_ar);
+        free(w.rc_pac);
 
     }
     else {

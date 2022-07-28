@@ -1114,6 +1114,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 	#elif CURR_SEARCH_METHOD ==1
 			uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 			uint64_t lower_b = iter_pos > curr_err? iter_pos-curr_err:1;
+			lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 			uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 			uint64_t middle=iter_pos;
 
@@ -1122,6 +1123,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 			err = std::max(curr_err,err);
 			uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 			uint64_t lower_b = iter_pos > err? iter_pos-err:1;
+			lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 			uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 			uint64_t middle=iter_pos;
 	#endif
@@ -1172,6 +1174,7 @@ void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_r
 				last_match_len = match_len;
 				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
+				iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 	#if Count_mem_ref
 				count_search_linear++;
 	#endif		
@@ -2257,6 +2260,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 	#elif CURR_SEARCH_METHOD ==1
 	uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 	uint64_t lower_b = iter_pos > curr_err? iter_pos-curr_err:1;
+	lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 	// std::cout << "[rightsmem]iterpos:"<<iter_pos<<"Upper b:" << upper_b <<" Lower b:" << lower_b <<"\n";
 	uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 	uint64_t middle=iter_pos;
@@ -2326,6 +2330,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 			last_match_len = match_len;
 			//  estimated position have smaller key than read, increase iter_pos and compare
 			iter_pos =lower_b+1;
+			iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 	#if Count_mem_ref
 			count_search_linear++;
 	#endif
@@ -2795,6 +2800,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 #elif CURR_SEARCH_METHOD ==1
 		uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 		uint64_t lower_b = iter_pos > curr_err? iter_pos-curr_err:1;
+		lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 		// std::cout << "[rightsmem]iterpos:"<<iter_pos<<"Upper b:" << upper_b <<" Lower b:" << lower_b <<"\n";
 		uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 		uint64_t middle=iter_pos;
@@ -2861,7 +2867,9 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 				// lookup key was bigger than middle, should check lower_b+1
 				last_match_len = match_len;
 				//  estimated position have smaller key than read, increase iter_pos and compare
-				iter_pos =lower_b+1;
+				iter_pos = lower_b+1;
+				iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
+
 	#if Count_mem_ref
 				count_search_linear++;
 	#endif
@@ -3049,12 +3057,14 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 #elif CURR_SEARCH_METHOD ==1
 		uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 		uint64_t lower_b = iter_pos > curr_err? iter_pos-curr_err:1;
+		lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 		uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 		uint64_t middle=iter_pos;
 #else	//old binary search method
 		err = std::max(curr_err,err);
 		uint64_t upper_b = iter_pos+err >= sa_num-1? sa_num-2: iter_pos+err;
 		uint64_t lower_b = iter_pos > err? iter_pos-err:1;
+		lower_b = lower_b >= upper_b ? upper_b - 1: lower_b;
 		uint64_t n = upper_b-lower_b + 1; // `end` is inclusive.
 		uint64_t middle=iter_pos;
 #endif
@@ -3117,6 +3127,7 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 				last_match_len = match_len;
 				//  estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
+				iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 	#if Count_mem_ref
 				count_search_linear++;
 	#endif		
@@ -3375,6 +3386,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 					last_match_len = match_len;
 					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos =lower_b+1;
+					iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 			#if Count_mem_ref
 					count_search_linear++;
 			#endif
@@ -3606,6 +3618,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 					last_match_len = match_len;
 					//  estimated position have smaller key than read, increase iter_pos and compare
 					iter_pos =lower_b+1;
+					iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 			#if Count_mem_ref
 					count_search_linear++;
 			#endif
@@ -3866,6 +3879,7 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 				last_match_len = match_len;
 				// estimated position have smaller key than read, increase iter_pos and compare
 				iter_pos =lower_b+1;
+				iter_pos = iter_pos >= sa_num ? sa_num-1 : iter_pos;
 		#if Count_mem_ref
 				count_search_linear++;
 		#endif
