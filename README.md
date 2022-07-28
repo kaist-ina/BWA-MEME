@@ -81,6 +81,7 @@ cd BWA-MEME
 
 # To compile all binary executables run below command. 
 # Put the highest number of available vCPU cores
+# You should also have cmake installed. Download by sudo apt-get install cmake
 make -j<num_threads>
 
 # Print version and Mode of compiled binary executable
