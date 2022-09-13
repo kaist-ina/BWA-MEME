@@ -1,5 +1,5 @@
 # BWA-MEME: BWA-MEM emulated with a machine learning approach 
-- BWA-MEME produces identical results as BWA-MEM2 and achieves 1.4x higher alignment throughput.
+- BWA-MEME produces results identical to BWA-MEM2 (or original bwa-mem 0.7.17) and achieves 1.4x higher alignment throughput.
 - Seeding throughput of BWA-MEME is up to 3.32x higher than BWA-MEM2.
 - BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
 - BWA-MEME leverages **learned index** in **suffix array search**.
