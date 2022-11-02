@@ -882,12 +882,12 @@ pub fn train_three_layer<T: TrainingKey>(md_container: &mut RMITrainingData<T>,
     
     
 
-    println!("[2nd layer]Computing lower bound stats...");
+    // println!("[2nd layer]Computing lower bound stats...");
     let lb_corrections_top = LowerBoundCorrection::new(
      |x| top_model.predict_to_int(&x.to_model_input()), second_model_num, md_container
     );
 
-    println!("[2nd layer]Fixing empty models...");
+    // println!("[2nd layer]Fixing empty models...");
     // replace any empty model with a model that returns the correct constant
     // (for LB predictions), if the underlying model supports it.
     let mut could_not_replace = false;
@@ -1582,7 +1582,7 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
     // }
     // avg = sum / (num_leaf_models+third_layer_num as u64 -partial_3rd_lb_corrs.len() as u64) as f64;
     // println!("Average gap: {}",avg);
-    println!("Total Partial model num: {}, Leaf of partial model num: {}",third_layer_num, partial_3rd_lb_corrs.len());
+    
     // for lower bound searches, we need to make sure that:
     //   (1) a query for the first key in the next leaf minus one 
     //       includes the key in the next leaf. (upper error)
@@ -1882,7 +1882,10 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
     }
 
     trace!("Evaluating Second layer of RMI...");
-    println!("Total last layer model num: {}",(num_leaf_models as usize +third_layer_num as usize - partial_3rd_lb_corrs.len() as usize ));
+
+    // print total leaf-models, partial models, 
+    // println!("Total Partial model num: {}, Leaf of partial model num: {}",third_layer_num, partial_3rd_lb_corrs.len());
+    println!("[INFO] Number of leaf and partial models: {}, leaf: {}, partial: {}, leaf models that have partial models:{}",(num_leaf_models as usize +third_layer_num as usize  ), num_leaf_models, third_layer_num, partial_3rd_lb_corrs.len() );
     
     // let mut new_last_layer_max_l1s = vec![(0, 0) ; (num_leaf_models as usize +third_layer_num as usize -partial_3rd_lb_corrs.len() as usize ) as usize];
 
