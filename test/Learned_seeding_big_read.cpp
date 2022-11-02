@@ -345,50 +345,52 @@ int main(int argc, char **argv) {
     FMI_search *fmiSearch = new FMI_search(argv[1]);
     fmiSearch->load_index_other_elements(BWA_IDX_BNS | BWA_IDX_PAC);
     
+
+    uint8_t* new_pac;
+
     /* add reverse-complement binary reference in pac */
     // fmiSearch->idx->pac = (uint8_t*) realloc(fmiSearch->idx->pac, fmiSearch->idx->bns->l_pac/2+1);
     int64_t ll_pac = (fmiSearch->idx->bns->l_pac * 2 + 3) / 4 * 4;
-    if (ll_pac > 0x10000) fmiSearch->idx->pac = realloc(fmiSearch->idx->pac, ll_pac/4);
-    memset_s(fmiSearch->idx->pac + (fmiSearch->idx->bns->l_pac+3)/4, (ll_pac - (fmiSearch->idx->bns->l_pac+3)/4*4) / 4, 0);
-    // for (int64_t l = fmiSearch->idx->bns->l_pac - 1; l >= 0; --l, ++fmiSearch->idx->bns->l_pac){
+    new_pac = (uint8_t*) malloc(ll_pac/4);
+    memset_s(new_pac , ll_pac / 4, 0);
+    for (int64_t l=0; l<fmiSearch->idx->bns->l_pac;l++){
+        _set_pac(new_pac, l , _get_pac(fmiSearch->idx->pac, l));
+    }
     for (int64_t l = fmiSearch->idx->bns->l_pac - 1; l >= 0; --l){
-			_set_pac(fmiSearch->idx->pac, (fmiSearch->idx->bns->l_pac <<1) - l-1, 3-_get_pac(fmiSearch->idx->pac, l));
-    }//add reverse complement
-
-    
+        _set_pac(new_pac, (fmiSearch->idx->bns->l_pac<<1)-l-1 , 3-_get_pac(fmiSearch->idx->pac, l));
+    }//add reverse complement   
     for (int64_t l=0; l<ll_pac/4; l++){
         // swap 8 bit to match endianess
-        fmiSearch->idx->pac[l] = BitReverseTable256[fmiSearch->idx->pac[l]];
+        new_pac[l] = BitReverseTable256[new_pac[l]];
     }
+    fmiSearch->idx->pac = new_pac;
+    // fmiSearch->idx->pac = (uint8_t*) realloc(fmiSearch->idx->pac, ll_pac/4);
+    // memset_s(fmiSearch->idx->pac + (fmiSearch->idx->bns->l_pac+3)/4, (ll_pac - (fmiSearch->idx->bns->l_pac+3)/4*4) / 4, 0);
+    // for (int64_t l = fmiSearch->idx->bns->l_pac - 1; l >= 0; --l, ++fmiSearch->idx->bns->l_pac){
+    // for (int64_t l = fmiSearch->idx->bns->l_pac - 1; l >= 0; --l){
+	// 		_set_pac(fmiSearch->idx->pac, (fmiSearch->idx->bns->l_pac <<1) - l-1, 3-_get_pac(fmiSearch->idx->pac, l));
+    // }//add reverse complement
+
+    
+    // for (int64_t l=0; l<ll_pac/4; l++){
+    //     // swap 8 bit to match endianess
+    //     fmiSearch->idx->pac[l] = BitReverseTable256[fmiSearch->idx->pac[l]];
+    // }
     uint64_t suffixarray_num;
 
-    #if 0
-    char sa_file_name[PATH_MAX];
-    strcpy_s(sa_file_name, PATH_MAX, argv[1]); 
-    strcat_s(sa_file_name, PATH_MAX, ".suffixarray_uint64");
-    std::ifstream in(sa_file_name, std::ios::binary);
-    if (!in.is_open()) {
-        fprintf(stderr, "[M::%s::LEARNED] Can't open suffix array file\n.", __func__);
-        exit(EXIT_FAILURE);
-    }
-    in.read(reinterpret_cast<char*>(&suffixarray_num), sizeof(uint64_t));
-    in.close();
-    fprintf(stderr, "number of suffix array:%ld\n.", suffixarray_num);
-    #endif
     uint64_t allocMem = 402653184;// size of learned index
 
     char sa_pos_file_name[PATH_MAX];
     strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]);
-    #if LOADSUFFIX
-    strcat_s(sa_pos_file_name, PATH_MAX, ".possa_packed");
-    #else
     strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    #endif
-
     FILE *sa_pos_fd;
     sa_pos_fd = fopen(sa_pos_file_name, "rb");
+    if (sa_pos_fd == NULL) {
+        fprintf(stderr, "[M::%s::MEME] Can't open suffix array position index (ref.fa.pos_packed or ref.fa.possa_packed)\n.", __func__);
+        exit(1);
+    }
     fseek(sa_pos_fd, 0, SEEK_END); 
-    suffixarray_num = ftell(sa_pos_fd) / SASIZE;
+    suffixarray_num = ftell(sa_pos_fd) / 5;
     rewind(sa_pos_fd);
 
     fprintf(stderr, "number of suffix array:%ld\n.", suffixarray_num);
@@ -483,15 +485,7 @@ int main(int argc, char **argv) {
     if (bwa_verbose >= 3) {
         fprintf(stderr, "[M::%s::LEARNED] Reading pos_packed File to memory\n", __func__);
     }
-    strcpy_s(sa_pos_file_name, PATH_MAX, argv[1]); 
-    strcat_s(sa_pos_file_name, PATH_MAX, ".pos_packed");
-    // FILE *sa_pos_fd;
-    fclose(sa_pos_fd);
-    sa_pos_fd = fopen(sa_pos_file_name, "rb");
-    if (sa_pos_fd == NULL) {
-        fprintf(stderr, "Can't open suffix array position index File\n.", __func__);
-        exit(1);
-    }
+    
     allocMem += 5*suffixarray_num * 8L; 
     assert(sa_position != NULL);
     double rtime = realtime();
@@ -697,4 +691,3 @@ int main(int argc, char **argv) {
     delete fmiSearch;
     return 0;
 }
-
