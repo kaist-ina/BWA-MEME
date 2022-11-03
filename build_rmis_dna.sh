@@ -27,8 +27,9 @@ fi
 
 if [ -z "$1" ]; then
     echo "Usage: build_rmis_dna.sh <reference file>
-    ex) ./build_rmis_dna.sh ./human.fasta"
-    echo "About: RMI training script for BWA-MEME. Training requires about 15 minute. 64GB memory required."
+    ex 1) ./build_rmis_dna.sh ./human.fasta
+    ex 2) ./build_rmis_dna.sh ./human.fasta 26"
+    echo "About: Learned-index training script for BWA-MEME. For human reference, training requires around 15 minutes and 64GB memory. You can set number of models to use for Learned-index (ex 2)."
     exit 0
 fi
 
