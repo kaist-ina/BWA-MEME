@@ -48,10 +48,10 @@ then
     echo "[Info] stat command could not be found, using default setting to build Learned-index"
 else
     FILESIZE=$(stat -c%s -L "$1.suffixarray_uint64")
-    if [ "$FILESIZE" -gt "8477550680" ]
+    if [ "$FILESIZE" -gt "8000000000" ]
     then
         BIT=28
-    elif [ "$FILESIZE" -gt "1047755068" ]
+    elif [ "$FILESIZE" -gt "1000000000" ]
     then
         BIT=26
     else 
