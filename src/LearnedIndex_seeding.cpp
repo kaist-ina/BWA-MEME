@@ -51,6 +51,7 @@ extern "C" {
 #endif
 
 double SA_NUM;
+uint64_t bit_shift;
 char* L1_PARAMETERS;
 char* L2_PARAMETERS;
 
@@ -74,7 +75,7 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 	{
 		SA_NUM=suffix_array_num;
 		uint64_t model_size = 0;
-		uint64_t num_model,bit_shift;
+		uint64_t num_model;
 		
 		{
 			std::ifstream infile(dataPath2, std::ios::in | std::ios::binary);
@@ -92,7 +93,6 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 				return false;
 			}
 			infile.read((char*)L1_PARAMETERS, model_size);
-			num_model = model_size/24; // number of model
 		}
 
 		{
@@ -110,12 +110,13 @@ bool learned_index_load(char const* dataPath, char const* dataPath2, char const*
 				fprintf(stderr, "Can't alloc memory for learned-index model\n.");
 				return false;
 			}
-			num_model = std::max(model_size/24, num_model); // number of model
+			num_model = model_size/24; // number of model
 			infile.read((char*)L2_PARAMETERS, model_size);
 
 		}
 		bit_shift = ffs(num_model)-1;
 		fprintf(stderr,"[Learned-Config] MODE:%d SEARCH_METHOD: %d MEM_TRADEOFF:%d EXPONENTIAL_SMEMSEARCH: %d DEBUG_MODE:%d Num 2nd Models:%ld PWL Bits Used:%ld\n", MODE, CURR_SEARCH_METHOD, MEM_TRADEOFF, EXPONENTIAL_SMEMSEARCH,DEBUG_MODE, num_model, bit_shift);
+		bit_shift = 64 - bit_shift;
 	}
 	return true;
 }
@@ -190,7 +191,7 @@ inline uint64_t learned_index_lookup(uint64_t key, size_t* err) { //p-rmi
 	size_t partial_start;
 	double partial_num;
 	// modelIndex = pwl(key);
-	modelIndex = key >>36;
+	modelIndex = key >>bit_shift;
 
 
 	fpred = linear(*((double*) (L2_PARAMETERS + (modelIndex * 24) + 0)), *((double*) (L2_PARAMETERS + (modelIndex * 24) + 8)), (double)key);

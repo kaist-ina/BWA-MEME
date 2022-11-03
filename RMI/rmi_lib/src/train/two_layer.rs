@@ -469,7 +469,7 @@ fn build_partial_3layer_models_from<T: TrainingKey>(data: &RMITrainingData<T>,
     assert!(! second_layer_data.is_empty());
     let mut container = RMITrainingData::new(Box::new(second_layer_data));
     if container.len() > make_partial_threshold {
-        let curr_third_layer_num = (container.len() as f64 / 100 as f64).round() as usize;
+        let curr_third_layer_num = (container.len() as f64 / average_partial_model_num as f64).round() as usize;
         // container.set_offset(container.get(0).1 - (third_layer_num * 100) );
         let start_y = container.get(0).1;
         let end_y = container.get(container.len()-1 ).1;
@@ -534,7 +534,7 @@ fn build_partial_3layer_models_from<T: TrainingKey>(data: &RMITrainingData<T>,
         partial_3rd_idx.append(&mut vec![(0,0)]);
     }
     assert_eq!(num_models as usize, leaf_models.len());
-    return (leaf_models , partial_3rd_idx,partial_3rd_lb_corrs, partial_3rd_models, third_layer_num);
+    return (leaf_models , partial_3rd_idx, partial_3rd_lb_corrs, partial_3rd_models, third_layer_num);
 }
 pub fn train_two_layer<T: TrainingKey>(md_container: &mut RMITrainingData<T>,
                                       layer1_model: &str, layer2_model: &str,
@@ -781,7 +781,7 @@ pub fn train_two_layer<T: TrainingKey>(md_container: &mut RMITrainingData<T>,
         model_max_error_idx,
         model_max_log2_error,
         last_layer_max_l1s: final_errors,
-        third_layer_max_l1s: vec![0],
+        third_layer_max_l1s: vec![],
         rmi: vec![vec![top_model], leaf_models],
         models: format!("{},{}", layer1_model, layer2_model),
         branching_factor: num_leaf_models,
@@ -882,12 +882,12 @@ pub fn train_three_layer<T: TrainingKey>(md_container: &mut RMITrainingData<T>,
     
     
 
-    println!("[2nd layer]Computing lower bound stats...");
+    // println!("[2nd layer]Computing lower bound stats...");
     let lb_corrections_top = LowerBoundCorrection::new(
      |x| top_model.predict_to_int(&x.to_model_input()), second_model_num, md_container
     );
 
-    println!("[2nd layer]Fixing empty models...");
+    // println!("[2nd layer]Fixing empty models...");
     // replace any empty model with a model that returns the correct constant
     // (for LB predictions), if the underlying model supports it.
     let mut could_not_replace = false;
@@ -1086,7 +1086,7 @@ pub fn train_three_layer<T: TrainingKey>(md_container: &mut RMITrainingData<T>,
         model_max_error_idx,
         model_max_log2_error,
         last_layer_max_l1s: final_errors,
-        third_layer_max_l1s: vec![0],
+        third_layer_max_l1s: vec![],
         rmi: vec![vec![top_model], sec_models, leaf_models],
         models: format!("{},{},{}", layer1_model, layer2_model, layer3_model),
         branching_factor: num_leaf_models,
@@ -1470,7 +1470,7 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
     println!("Computing last level errors...");
     // evaluate model, compute last level errors
 
-    let mut max_min_gap = vec![[0, u64::MAX] ; num_leaf_models as usize];
+    // let mut max_min_gap: Vec<(u64, u64)> = vec![[0, u64::MAX] ; num_leaf_models as usize];
 
     let mut last_layer_max_l1s = vec![(0, 0) ; num_leaf_models as usize];
     let mut third_layer_max_l1s = vec![(0,0) ; third_layer_num as usize];
@@ -1566,23 +1566,23 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
             third_layer_max_l1s[target_third as usize ] = (cur_val.0 + 1, min_flag<<62| min_err<<32 | max_flag<<31 | max_err );
         }
 
-        if ( (y as u64) > max_min_gap[target as usize][0]){
-            max_min_gap[target as usize][0] = y as u64;
-        }
-        if ( (y as u64) < max_min_gap[target as usize][1]){
-            max_min_gap[target as usize][1] = y as u64;
-        }
+        // if ( (y as u64) > max_min_gap[target as usize][0]){
+        //     max_min_gap[target as usize][0] = y as u64;
+        // }
+        // if ( (y as u64) < max_min_gap[target as usize][1]){
+        //     max_min_gap[target as usize][1] = y as u64;
+        // }
         
     }    
 
     let mut sum:f64 = 0.0; 
     let mut avg:f64 = 0.0; 
-    for i__ in 0..num_leaf_models as usize {
-        sum +=  (max_min_gap[i__][0] - max_min_gap[i__][1]) as f64 ;
-    }
-    avg = sum / (num_leaf_models+third_layer_num as u64 -partial_3rd_lb_corrs.len() as u64) as f64;
-    println!("Average gap: {}",avg);
-    println!("Total Partial model num: {}, Leaf of partial model num: {}",third_layer_num, partial_3rd_lb_corrs.len());
+    // for i__ in 0..num_leaf_models as usize {
+    //     sum +=  (max_min_gap[i__][0] - max_min_gap[i__][1]) as f64 ;
+    // }
+    // avg = sum / (num_leaf_models+third_layer_num as u64 -partial_3rd_lb_corrs.len() as u64) as f64;
+    // println!("Average gap: {}",avg);
+    
     // for lower bound searches, we need to make sure that:
     //   (1) a query for the first key in the next leaf minus one 
     //       includes the key in the next leaf. (upper error)
@@ -1881,56 +1881,81 @@ pub fn train_partial_three_layer<T: TrainingKey>(md_container: &mut RMITrainingD
             num_leaf_models, large_corrections);
     }
 
-    trace!("Evaluating two-layer RMI...");
-    println!("Total last layer model num: {}",(num_leaf_models as usize +third_layer_num as usize - partial_3rd_lb_corrs.len() as usize ));
-    let mut new_last_layer_max_l1s = vec![(0, 0) ; (num_leaf_models as usize +third_layer_num as usize -partial_3rd_lb_corrs.len() as usize ) as usize];
+    trace!("Evaluating Second layer of RMI...");
 
-    let mut idx_ = 0;
-    for (num_key, err) in &last_layer_max_l1s {
-        if err & 0x8000000000000000u64 != 0 {
-            continue;
-        }
-        else{
-            if *num_key != 0{
-                // println!("[2nd layer]num: {} err:{}", *num_key, *err);
-            }
-            new_last_layer_max_l1s[idx_].0 = *num_key;
-            // new_last_layer_max_l1s[idx_].1 = *err & 0xffffffff;
-            new_last_layer_max_l1s[idx_].1 = (*err & 0x7fffffff) + ((*err >> 32) & 0x3fffffff);
-            idx_ += 1;
-            continue
-        }
-    }
+    // print total leaf-models, partial models, 
+    // println!("Total Partial model num: {}, Leaf of partial model num: {}",third_layer_num, partial_3rd_lb_corrs.len());
+    println!("[INFO] Number of leaf and partial models: {}, leaf: {}, partial: {}, leaf models that have partial models:{}",(num_leaf_models as usize +third_layer_num as usize  ), num_leaf_models, third_layer_num, partial_3rd_lb_corrs.len() );
     
-    println!("Partial start at idx:{}",idx_);
-    for (num_key_3, err_3) in &third_layer_max_l1s{
-        new_last_layer_max_l1s[idx_].0 = *num_key_3;
-        // new_last_layer_max_l1s[idx_].1 = *err_3 & 0xffffffff;
-        new_last_layer_max_l1s[idx_].1 = (*err_3 & 0x7fffffff) + ((*err_3 >> 32) & 0x3fffffff);
-        if *num_key_3 != 0{
-            // println!("[3rd layer]num: {} err:{}", *num_key_3, *err_3);
-        }
-        idx_+= 1;
-    }
+    // let mut new_last_layer_max_l1s = vec![(0, 0) ; (num_leaf_models as usize +third_layer_num as usize -partial_3rd_lb_corrs.len() as usize ) as usize];
 
-    let (m_idx, m_err) = new_last_layer_max_l1s
+    // let mut idx_ = 0;
+    // for (num_key, err) in &last_layer_max_l1s {
+    //     if err & 0x8000000000000000u64 != 0 {
+    //         continue;
+    //     }
+    //     else{
+    //         if *num_key != 0{
+    //             // println!("[2nd layer]num: {} err:{}", *num_key, *err);
+    //         }
+    //         new_last_layer_max_l1s[idx_].0 = *num_key;
+    //         // new_last_layer_max_l1s[idx_].1 = *err & 0xffffffff;
+    //         new_last_layer_max_l1s[idx_].1 = (*err & 0x7fffffff) + ((*err >> 32) & 0x3fffffff);
+    //         idx_ += 1;
+    //         continue
+    //     }
+    // }
+    
+    // println!("Partial start at idx:{}",idx_);
+    // for (num_key_3, err_3) in &third_layer_max_l1s{
+    //     new_last_layer_max_l1s[idx_].0 = *num_key_3;
+    //     // new_last_layer_max_l1s[idx_].1 = *err_3 & 0xffffffff;
+    //     new_last_layer_max_l1s[idx_].1 = (*err_3 & 0x7fffffff) + ((*err_3 >> 32) & 0x3fffffff);
+    //     if *num_key_3 != 0{
+    //         // println!("[3rd layer]num: {} err:{}", *num_key_3, *err_3);
+    //     }
+    //     idx_+= 1;
+    // }
+
+    // let (m_idx, m_err) = new_last_layer_max_l1s
+    //     .iter().enumerate()
+    //     .max_by_key(|(_idx, &x)| x.1).unwrap();
+
+    // let model_max_error = m_err.1;
+    // let model_max_error_idx = m_idx;
+
+    // let model_avg_error: f64 = new_last_layer_max_l1s
+    //   .iter().map(|(n, err)| n * err).sum::<u64>() as f64 / num_rows as f64;
+
+    // let model_avg_l2_error: f64 = new_last_layer_max_l1s
+    //     .iter()
+    //     .map(|(n, err)| ((n*err) as f64).powf(2.0) / num_rows as f64).sum::<f64>();
+
+    // // let model_avg_log2_error: f64 = new_last_layer_max_l1s
+    // //     .iter().map(|(n, err)| (*n as f64)*((2*err + 2) as f64).log2()).sum::<f64>() / num_rows as f64;
+    // let model_avg_log2_error: f64 = new_last_layer_max_l1s
+    //     .iter().map(|(n, err)| (*n as f64)*((err + 2) as f64).log2()).sum::<f64>() / num_rows as f64;
+
+    // let model_max_log2_error: f64 = (model_max_error as f64).log2();
+
+    let (m_idx, m_err) = last_layer_max_l1s
         .iter().enumerate()
-        .max_by_key(|(_idx, &x)| x.1).unwrap();
+        .max_by_key(|(_idx, &x)| (x.1 & 0x7fffffff + ((x.1 >> 32) & 0x3fffffff) )).unwrap();
 
-    let model_max_error = m_err.1;
+    let model_max_error = (m_err.1 & 0x7fffffff) + ((m_err.1 >> 32) & 0x3fffffff);
     let model_max_error_idx = m_idx;
 
-    let model_avg_error: f64 = new_last_layer_max_l1s
-      .iter().map(|(n, err)| n * err).sum::<u64>() as f64 / num_rows as f64;
+    let model_avg_error: f64 = last_layer_max_l1s
+      .iter().map(|(n, err)| n * ( (err& 0x7fffffff) + ((*err >> 32) & 0x3fffffff)) ).sum::<u64>() as f64 / num_rows as f64;
 
-    let model_avg_l2_error: f64 = new_last_layer_max_l1s
+    let model_avg_l2_error: f64 = last_layer_max_l1s
         .iter()
-        .map(|(n, err)| ((n*err) as f64).powf(2.0) / num_rows as f64).sum::<f64>();
+        .map(|(n, err)| ( ((err& 0x7fffffff) + ((*err >> 32) & 0x3fffffff)) as f64).powf(2.0) / num_rows as f64).sum::<f64>();
 
     // let model_avg_log2_error: f64 = new_last_layer_max_l1s
     //     .iter().map(|(n, err)| (*n as f64)*((2*err + 2) as f64).log2()).sum::<f64>() / num_rows as f64;
-    let model_avg_log2_error: f64 = new_last_layer_max_l1s
-        .iter().map(|(n, err)| (*n as f64)*((err + 2) as f64).log2()).sum::<f64>() / num_rows as f64;
+    let model_avg_log2_error: f64 = last_layer_max_l1s
+        .iter().map(|(n, err)| (*n as f64)*((( (err& 0x7fffffff) + ((*err >> 32) & 0x3fffffff)) + 2) as f64).log2()).sum::<f64>() / num_rows as f64;
 
     let model_max_log2_error: f64 = (model_max_error as f64).log2();
 
