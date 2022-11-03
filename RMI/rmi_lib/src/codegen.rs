@@ -1089,7 +1089,7 @@ fn generate_model(
     key_type: KeyType
 ) -> Result<(), std::io::Error> {
 
-    println!("Construct layer");
+    // println!("Construct layer");
     // construct the code for the model parameters.
     let mut layer_params: Vec<LayerParams> = Vec::new();
     

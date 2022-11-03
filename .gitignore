@@ -25,7 +25,9 @@
 *.sse42
 *PARAMETERS
 *-tmp
+build/
 bwa-meme
+bwa-meme_mode*
 bwa-mem2
 a.out
 *.txt
@@ -57,3 +59,4 @@ test/ert_seeding_big_read
 test/fmi_seeding_big_read
 test/learned_seeding_big_read
 test/star_align
+*cmake

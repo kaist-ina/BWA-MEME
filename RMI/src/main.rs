@@ -329,6 +329,7 @@ fn main() {
         );
 
         if true {
+            
             println!("Model build time: {} ms", trained_model.build_time / 1_000_000);
 
             println!(
@@ -336,22 +337,22 @@ fn main() {
                 trained_model.model_avg_error as f64,
                 trained_model.model_avg_error / num_rows as f64 * 100.0
             );
-            println!(
-                "Average model L2 error: {}",
-                trained_model.model_avg_l2_error
-            );
+            // println!(
+            //     "Average model L2 error: {}",
+            //     trained_model.model_avg_l2_error
+            // );
             println!(
                 "Average model log2 error: {}",
                 trained_model.model_avg_log2_error
             );
+            // println!(
+            //     "Max model log2 error: {}",
+            //     trained_model.model_max_log2_error
+            // );
             println!(
-                "Max model log2 error: {}",
-                trained_model.model_max_log2_error
-            );
-            println!(
-                "Max model error on model {}: {} ({}%)",
+                "Max model log2 error on model {}: {} ({}%)",
                 trained_model.model_max_error_idx,
-                trained_model.model_max_error,
+                trained_model.model_max_log2_error,
                 trained_model.model_max_error as f64 / num_rows as f64 * 100.0
             );
         }
