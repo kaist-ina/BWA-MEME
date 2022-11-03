@@ -34,7 +34,7 @@ fn main() {
     env_logger::init();
 
     let matches = App::new("RMI Learner")
-        .version("0.1")
+        .version("0.2")
         .author("Youngmok Jung <tom418@kaist.ac.kr>")
         .about("Learns recursive model indexes, code adapted from Ryan Marcus <ryan@ryanmarc.us>")
         .arg(Arg::with_name("input")

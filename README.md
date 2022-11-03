@@ -25,11 +25,11 @@
 - Just add single option "-7" to deploy BWA-MEME instead of BWA-MEM2 (BWA-MEME does not change anything, except the speed).
 
 ## Performance of BWA-MEME
-#### The seeding module of BWA-MEME uses Learned-index. This, in turn, results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
-<img src="https://github.com/kaist-ina/BWA-MEME/blob/dev/images/BWA-MEME-SeedingResults.jpg" width="50%"/>
+#### The seeding module of BWA-MEME uses Learned-index. This results in 3.32x higher seeding throughput compared to FM-index of BWA-MEM2.
+<img src="https://github.com/kaist-ina/BWA-MEME/blob/master/images/BWA-MEME-SeedingResults.jpg" width="50%"/>
 
 #### End-to-end alignment throughput is up to 1.4x higher than BWA-MEM2.
-<img src="https://github.com/kaist-ina/BWA-MEME/blob/dev/images/BWA-MEME-AlignmentResults.png" width="50%" />
+<img src="https://github.com/kaist-ina/BWA-MEME/blob/master/images/BWA-MEME-alignment_throughput.png" width="50%" />
 
 ---
 ## Getting Started
@@ -147,10 +147,15 @@ make -j<number of threads>
 Credits to @keiranmraine, see issue [#10](../../issues/10)
 
 - Due to increased alignment throughput, given enough threads the bottleneck moves from `alignment` to `Samtools sorting`. As a result BWA-MEME might require additional pipeline modification (not a simple drop-in replacement)
-- While existing pipeline might be still faster (reported in issue [#10](../../issues/10)), CPU can be wasted.
-- To reduce the CPU waste, you might want to use `mbuffer` in the pipeline or write alignment outputs to a file with fast compression.
-- We will investigate a faster way to incorporate BWA-MEME and `Samtools sorting`
-
+- To reduce the CPU waste, you might want to use `mbuffer` in the pipeline or write alignment outputs to a file with fast compression. 
+```
+# mbuffer size should be determined by memory option given to samtools.
+# ex) samtools sort uses 20 threads, 1G per each thread, so mbuffer size should be 20G (= -m 1G x -@ 20)
+bwa-meme mem -7 -K 100000000 -t 32 \
+ <reference> <fastq 1> <fastq 2> \
+ | mbuffer -m 20G \
+ | samtools sort -m 1G --output-fmt bam,level=1 -T ./sorttmp -@ 20 - > sorted.bam
+```
 
 ### Reference file download
 You can download the reference using the command below.

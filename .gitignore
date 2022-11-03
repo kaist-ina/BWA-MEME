@@ -30,6 +30,8 @@ bwa-mem2
 a.out
 *.txt
 *.tar.gz
+build/
+bwa-meme_mode*
 sa_lep_val_result.txt
 rmi_infer_result.txt
 rmi_data
