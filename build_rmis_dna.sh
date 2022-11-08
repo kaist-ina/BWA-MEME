@@ -47,9 +47,9 @@ fi
 
 if [ -z "$1" ]; then
     echo "Usage: build_rmis_dna.sh <reference file>
-    ex 1) ./build_rmis_dna.sh ./human.fasta
-    ex 2) ./build_rmis_dna.sh ./human.fasta 26"
-    echo "About: Learned-index training script for BWA-MEME. For human reference, training requires around 15 minutes and 64GB memory. You can set number of models to use for Learned-index (ex 2)."
+    ex 1) ./build_rmis_dna.sh ./human.fasta        # default setting
+    ex 2) ./build_rmis_dna.sh ./human.fasta 26     # set number of models to use for second layer 2^26" 
+    echo "About: Learned-index training script for BWA-MEME. For human reference, training requires around 15 minutes and 64GB memory. You can set number of models to use for Learned-index (as in ex 2)."
     exit 0
 fi
 
@@ -119,7 +119,7 @@ function build_rmi_set() {
 	    RMI/target/release/bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl$BIT,linear,linear_spline $(( 1 << $BIT ))
     elif command -v bwa-meme-train-prmi &> /dev/null 
     then
-	    bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl,linear,linear_spline 268435456
+	    bwa-meme-train-prmi --data-path $DIR_NAME $DATA_PATH $DATA_NAME pwl$BIT,linear,linear_spline $(( 1 << $BIT ))
     else
         echo ERROR: BWA-MEME/RMI directory does not exist or run this script in BWA-MEME folder
     fi
