@@ -136,7 +136,6 @@ void buildSAandLEP(char* prefix, int num_threads){
         fprintf(stderr,"Warning: we recommend to use more number of threads(ex. 8, 16 or 32) to build index quickly.\n");
     }
     
-    uint64_t startTick;
     int status;
     int index_alloc  = 0;
     std::string reference_seq;
@@ -234,7 +233,6 @@ void buildSAandLEP(char* prefix, int num_threads){
     int64_t *suffix_array=(int64_t *)_mm_malloc(size, 64);
     index_alloc += size;
     assert_not_null(suffix_array, size, index_alloc);
-    startTick = __rdtsc();
 
 
     fprintf(stderr,"[Build-Index-MEME] Building Suffix array with sais library\n");
