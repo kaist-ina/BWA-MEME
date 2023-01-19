@@ -47,7 +47,8 @@
 #if (__AVX512BW__ || __AVX2__)
 #include <immintrin.h>
 #else
-#include <smmintrin.h>  // for SSE4.1
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/avx2.h>
 #define __mmask8 uint8_t
 #define __mmask16 uint16_t
 #endif

@@ -34,7 +34,8 @@
 #include <math.h>
 #include <fstream>
 #include <iostream>
-#include <emmintrin.h>
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/sse2.h>
 #include "utils.h"
 #include "Learnedindex.h"
 #include "LearnedIndex_seeding.h"
@@ -49,6 +50,13 @@ extern "C" {
 #include <snprintf_s.h>
 #ifdef __cplusplus
 }
+#endif
+
+#if !defined(__SSE__)
+#define _mm_malloc(size, align) aligned_alloc(align, size)
+#define _mm_free free
+#define _MM_HINT_NTA 0
+#define _MM_HINT_T0 0
 #endif
 
 #define assert_not_null(x, size, cur_alloc) \

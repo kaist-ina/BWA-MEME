@@ -37,7 +37,8 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #include<set>
 #include <ctime>
 #include<fstream>
-#include <emmintrin.h>
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/sse2.h>
 #include <inttypes.h>
 #include <limits.h>
 
@@ -45,6 +46,14 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 
 #include "utils.h"
 #include "bntseq.h"
+
+
+#if !defined(__SSE__)
+#define _mm_malloc(size, align) aligned_alloc(align, size)
+#define _mm_free free
+#define _MM_HINT_NTA 0
+#define _MM_HINT_T0 0
+#endif
 
 #if !SAIS
 #include<seqan/index.h>
