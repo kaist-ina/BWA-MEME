@@ -59,7 +59,7 @@ void __cpuid(unsigned int i, unsigned int cpuid[4]) {
 #ifdef _WIN32
     __cpuid((int *) cpuid, (int)i);
 
-#else
+#elif defined(__x86_64__) || defined(__i386__)
     asm volatile
         ("cpuid" : "=a" (cpuid[0]), "=b" (cpuid[1]), "=c" (cpuid[2]), "=d" (cpuid[3])
             : "0" (i), "2" (0));
@@ -73,6 +73,7 @@ void __cpuid(unsigned int i, unsigned int cpuid[4]) {
 
 int HTStatus()
 {
+#if defined(__x86_64__) || defined(__i386__)
     unsigned int cpuid[4];
     char platform_vendor[12];
     __cpuid(0, cpuid);
@@ -104,6 +105,9 @@ int HTStatus()
         fprintf(stderr, "CPUs support hyperThreading !!\n");
 
     return ht;
+#else
+    return 0;
+#endif
 }
 
 int64_t prefetchMemoryMappedFile(memory_mapped_file_t* mmFile) {

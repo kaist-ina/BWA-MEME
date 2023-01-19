@@ -54,7 +54,7 @@ ARCH_FLAGS=	-msse -msse2 -msse3 -mssse3 -msse4.1
 MEM_FLAGS=	-DSAIS=1
 CPPFLAGS+=	-DENABLE_PREFETCH -DV17=1 -DMATE_SORT=1 $(MEM_FLAGS) -DMODE=$(MODE)
 
-INCLUDES=   -Isrc -Iext/safestringlib/include 
+INCLUDES=   -Isrc -Iext/safestringlib/include  -Iext
 LIBS=		-lpthread -lm -lz -L. -lbwa  -Lext/safestringlib -lsafestring $(STATIC_GCC)
 
 ifeq ($(USE_MIMALLOC), 1)
