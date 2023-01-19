@@ -49,6 +49,8 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #define BATCH_MUL 20
 #define SEEDS_PER_CHAIN 1
 
+#define N_SMEM_KERNEL 3
+
 #define LEARNED_MAX_READ_LEN 500
 #define ERT_MAX_READ_LEN 301
 #define READ_LEN 151
