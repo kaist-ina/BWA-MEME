@@ -3217,9 +3217,10 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 	int min_intv_value = raux->min_intv_limit ;
 
 	uint64_t iter_pos = est_pos;
-	iter_pos = iter_pos > MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
-	iter_pos = iter_pos < sa_num-1 - MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:sa_num - 1-MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
-	
+	if (!no_search){
+		iter_pos = iter_pos > MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+		iter_pos = iter_pos < sa_num-1 - MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:sa_num - 1-MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+	}
 	uint32_t read_valid_len;
 	bool exact_match_flag=false;
 	uint32_t match_len;
@@ -3710,8 +3711,10 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 	*/
 	int min_intv_value = raux->min_intv_limit ;
 	uint64_t iter_pos = est_pos;
-	iter_pos = iter_pos > MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
-	iter_pos = iter_pos < sa_num -1- MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:sa_num -1- MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+	if (!no_search){
+		iter_pos = iter_pos > MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+		iter_pos = iter_pos < sa_num -1- MEM_TRADEOFF_USECACHE_EXP_SEARCH_START? iter_pos:sa_num -1- MEM_TRADEOFF_USECACHE_EXP_SEARCH_START;
+	}
 	uint64_t read_valid_len= *ambiguous_pos - raux->pivot;
 	bool exact_match_flag=false;
 	uint32_t match_len;
