@@ -3,7 +3,7 @@
 
 BIT=28
 
-echo "[Info] build_rmis_dna script for BWA-MEME 1.0.5v"
+echo "[Info] build_rmis_dna script for BWA-MEME 1.0.6v"
 if  ! command -v bwa-meme-train-prmi &> /dev/null 
 then
     # bwa-meme-train-prmi command not found, should build it
