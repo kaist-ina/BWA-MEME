@@ -1,9 +1,14 @@
 # BWA-MEME: BWA-MEM emulated with a machine learning approach 
-- BWA-MEME produces results identical to BWA-MEM2 (or original bwa-mem 0.7.17) and achieves 1.4x higher alignment throughput.
-- Seeding throughput of BWA-MEME is up to 3.32x higher than BWA-MEM2.
-- BWA-MEME builds upon BWA-MEM2 and includes performance improvements to the seeding. 
-- BWA-MEME leverages **learned index** in **suffix array search**.
-- BWA-MEME also provides feature to accomodate various memory size in servers.
+<img src="images/DALL·E_logo_bwa.png" width="30%"  style="margin-left: auto; margin-right: auto; display: block;" />
+
+- BWA-MEME produces **identical SAM output with BWA-MEM2** (or original **bwa mem 0.7.17**).
+- Only uses CPU to achieve **1.4x higher alignment throughput**, does not use special hardware.
+- Seeding throughput of BWA-MEME is up to **3.32x** higher than BWA-MEM2.
+- BWA-MEME also provides feature to accomodate various memory size in servers (38GB ~ 128GB).
+  
+Contact: [Youngmok Jung](https://quito418.github.io/quito418/), Dongsu Han
+Email: tom418@kaist.ac.kr, dhan.ee@kaist.ac.kr
+
 ---
 
 ## Contents
