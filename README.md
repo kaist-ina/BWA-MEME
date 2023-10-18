@@ -1,5 +1,7 @@
 # BWA-MEME: BWA-MEM emulated with a machine learning approach 
+<div align="center">
 <img src="images/DALL·E_logo_bwa.png" width="30%"  style="margin-left: auto; margin-right: auto; display: block;" />
+</div>
 
 - BWA-MEME produces **identical SAM output with BWA-MEM2** (or original **bwa mem 0.7.17**).
 - Only uses CPU to achieve **1.4x higher alignment throughput**, does not use special hardware.
