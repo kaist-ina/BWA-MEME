@@ -9,6 +9,7 @@
 - BWA-MEME can adapt to a wide range of server memory sizes, from 38GB to 128GB.
   
 Contact: [Youngmok Jung](https://quito418.github.io/quito418/), Dongsu Han
+
 Email: tom418@kaist.ac.kr, dhan.ee@kaist.ac.kr
 
 ---
