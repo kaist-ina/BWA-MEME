@@ -4,9 +4,10 @@
 </div>
 
 - BWA-MEME generates **the same SAM output** as **BWA-MEM2** and the original **bwa mem** 0.7.17.
-- BWA-MEME is optimized for CPU usage, achieving up to **1.4x higher** alignment throughput, No specialized hardware is required.
+- BWA-MEME is optimized for CPU usage, achieving up to **1.4x higher** alignment throughput, no specialized hardware is required.
 - The seeding throughput of BWA-MEME is up to **3.32x faster** than BWA-MEM2.
 - BWA-MEME can adapt to a wide range of server memory sizes, from 38GB to 128GB.
+- BWA-MEME provides runtime index-building that is equivalent to disk read speed of 3-5 GB per second.
   
 Contact: [Youngmok Jung](https://quito418.github.io/quito418/), Dongsu Han
 
