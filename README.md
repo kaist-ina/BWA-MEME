@@ -3,7 +3,7 @@
 <img src="images/DALL·E_logo_bwa.png" width="30%"  style="margin-left: auto; margin-right: auto; display: block;" />
 </div>
 
-- BWA-MEME generates **the same SAM output** as **BWA-MEM2** and the original **bwa mem** 0.7.17. [1](https://github.com/kaist-ina/BWA-MEME/issues/27) [2](https://daylily-informatics.github.io/2023-05-03-very-fast-bwa-mem2ert-invocation/)
+- BWA-MEME generates **the same SAM output** as **BWA-MEM2** and the original **bwa mem** 0.7.17. [[1]](https://github.com/kaist-ina/BWA-MEME/issues/27) [[2]](https://daylily-informatics.github.io/2023-05-03-very-fast-bwa-mem2ert-invocation/)
 - BWA-MEME is optimized for CPU usage, achieving up to **1.4x higher** alignment throughput, no specialized hardware is required.
 - The seeding throughput of BWA-MEME is up to **3.32x faster** than BWA-MEM2.
 - BWA-MEME can adapt to a wide range of server memory sizes, from 38GB to 128GB.
