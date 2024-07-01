@@ -3,12 +3,23 @@
 <img src="images/DALL·E_logo_bwa.png" width="30%"  style="margin-left: auto; margin-right: auto; display: block;" />
 </div>
 
-- BWA-MEME generates **the same SAM output** as **BWA-MEM2** and the original **bwa mem** 0.7.17.
+- BWA-MEME generates **the same SAM output** as **BWA-MEM2** and the original **bwa mem** 0.7.17. [1](https://github.com/kaist-ina/BWA-MEME/issues/27) [2](https://daylily-informatics.github.io/2023-05-03-very-fast-bwa-mem2ert-invocation/)
 - BWA-MEME is optimized for CPU usage, achieving up to **1.4x higher** alignment throughput, no specialized hardware is required.
 - The seeding throughput of BWA-MEME is up to **3.32x faster** than BWA-MEM2.
 - BWA-MEME can adapt to a wide range of server memory sizes, from 38GB to 128GB.
-- BWA-MEME provides runtime index-building that is equivalent to disk read speed of 3-5 GB per second.
-  
+- To accelerate index loading in low disk speed env (e.g., luster, HDD disks), BWA-MEME provides runtime index-building that is equivalent to disk read speed of 3-5 GB per second.
+
+BWA-MEME has been used in numerous institutions: 
+- [NIH](https://jamanetwork.com/journals/jamadermatology/article-abstract/2813276)
+- San Diego Supercomputer Center
+- [University of Copenhagen](https://www.nature.com/articles/s41467-024-49370-2)
+- [Temple University, Philadelphia, USA](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10993757/)
+- [Université de Montpellier, France](https://www.mdpi.com/1467-3045/45/12/608)
+- [Harbin Institute of Technology Shenzhen](https://www.sciencedirect.com/science/article/abs/pii/B9780443141706000342)
+- [Capital Medical University, Beijing](https://link.springer.com/article/10.1186/s40168-023-01635-6)
+- [Inocras (previous Genome Insight. Inc)](https://www.medrxiv.org/content/10.1101/2024.02.08.24302488.abstract)
+- Hospitals [[1]](https://www.nature.com/articles/s41598-023-47166-w) [[2]](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10335436/) [[3]](https://onlinelibrary.wiley.com/doi/full/10.1111/cns.14815) [[4]](https://link.springer.com/article/10.1186/s12866-024-03352-y)
+
 Contact: [Youngmok Jung](https://quito418.github.io/quito418/), Dongsu Han
 
 Email: tom418@kaist.ac.kr, dhan.ee@kaist.ac.kr
@@ -82,6 +93,10 @@ diff <output_mem2.sam> <output_meme.sam>
 
 ---
 ### Install Option 2. Build locally
+#### Required libraries
+```sh
+sudo apt-get install libz-dev cmake
+```
 #### Compile the code
 ```sh
 # Compile from source
