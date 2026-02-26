@@ -619,15 +619,20 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
     // loading end
     allocMem += ((nthreads * MAX_LINE_LEN * sizeof(mem_tlv)) + (nthreads * MAX_LINE_LEN * sizeof(u64v)));
     allocMem += ((nthreads * BATCH_MUL * READ_LEN * sizeof(mem_tl)) + (nthreads * MAX_HITS_PER_READ * sizeof(uint64_t)));
-    w.smemBufSize = MAX_LINE_LEN * sizeof(mem_tlv);
+    /* -8 batch seeding: allocate INTER_READ_BATCH persistent smems/hits slots per thread
+     * to avoid repeated malloc/free cycles during batch processing.
+     * Slot for thread tid, batch slot bi: [tid * INTER_READ_BATCH + bi]           */
+    w.smemBufSize = INTER_READ_BATCH * sizeof(mem_tlv);
     w.l_smems = (mem_tlv*) malloc(nthreads * w.smemBufSize);
     assert(w.l_smems != NULL);
-    w.hitBufSize = MAX_LINE_LEN * sizeof(u64v);
+    w.hitBufSize = INTER_READ_BATCH * sizeof(u64v);
     w.hits_ar = (u64v*) malloc(nthreads * w.hitBufSize);
     assert(w.hits_ar != NULL);
     for (int i = 0 ; i < nthreads; ++i) {
-        kv_init_base(mem_tl, w.l_smems[i * MAX_LINE_LEN], BATCH_MUL * READ_LEN);
-        kv_init_base(uint64_t, w.hits_ar[i * MAX_LINE_LEN], MAX_HITS_PER_READ);
+        for (int bi = 0; bi < INTER_READ_BATCH; ++bi) {
+            kv_init_base(mem_tl, w.l_smems[i * INTER_READ_BATCH + bi], BATCH_MUL * READ_LEN);
+            kv_init_base(uint64_t, w.hits_ar[i * INTER_READ_BATCH + bi], MAX_HITS_PER_READ);
+        }
     }
 
     fprintf(stderr, "3. Memory pre-allocation for BWT: %0.4lf MB\n", allocMem/1e6);
@@ -1100,8 +1105,10 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
     else if (algo_num == 1){
         free(w.sa_position);
         for (int i = 0 ; i < nthreads; ++i) {
-            kv_destroy(w.l_smems[i * MAX_LINE_LEN]);
-            kv_destroy(w.hits_ar[i * MAX_LINE_LEN]);
+            for (int bi = 0; bi < INTER_READ_BATCH; ++bi) {
+                kv_destroy(w.l_smems[i * INTER_READ_BATCH + bi]);
+                kv_destroy(w.hits_ar[i * INTER_READ_BATCH + bi]);
+            }
             _mm_free(w.mmc.lim[i]);
         }
         free(w.l_smems);
@@ -1191,7 +1198,8 @@ static void usage(const mem_opt_t *opt)
     fprintf(stderr, "                 (4 sigma from the mean if absent) and min of the insert size distribution.\n");
     fprintf(stderr, "                 FR orientation only. [inferred]\n");
     fprintf(stderr, "   -Z            Use ERT index for seeding\n");
-    fprintf(stderr, "   -7            Use Learned index for seeding (use BWA-MEME)\n");
+    fprintf(stderr, "   -7            Use Learned index for seeding (BWA-MEME scalar mode)\n");
+    fprintf(stderr, "   -8            Use Learned index with SIMD-accelerated read encoding and batch P-RMI lookup\n");
     fprintf(stderr, "Note: Please read the man page for detailed description of the command line and options.\n");
 }
 
@@ -1226,7 +1234,7 @@ int main_mem(int argc, char *argv[])
     
     /* Parse input arguments */
     // comment: added option '5' in the list
-    while ((c = getopt(argc, argv, "51qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:7")) >= 0)
+    while ((c = getopt(argc, argv, "51qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:78")) >= 0)
     {
         if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
         else if (c == '1') no_mt_io = 1;
@@ -1364,6 +1372,11 @@ int main_mem(int argc, char *argv[])
         }
         else if (c == '7') {
             useLearned = 1;
+            opt->use_simd8_encode = 0;
+        }
+        else if (c == '8') {
+            useLearned = 1;
+            opt->use_simd8_encode = 1;
         }
         else {
             free(opt);
@@ -1433,6 +1446,7 @@ int main_mem(int argc, char *argv[])
             return 1;
         }
     } else update_a(opt, &opt0);
+
     
     /* Matrix for SWA */
     bwa_fill_scmat(opt->a, opt->b, opt->mat);
@@ -1441,6 +1455,11 @@ int main_mem(int argc, char *argv[])
     uint64_t tim = __rdtsc();
     
     fprintf(stderr, "* Ref file: %s\n", argv[optind]);          
+    if (useLearned && !useErt) {
+        fprintf(stderr, "[M::%s] Learned index mode: %s\n", __func__,
+                opt->use_simd8_encode ? "SIMD-encode+batch-lookup (-8)" : "scalar (-7)");
+    }
+
     if (!useLearned && !useErt) {
         aux.fmi = new FMI_search(argv[optind]);
         aux.fmi->load_index();
@@ -1610,6 +1629,10 @@ int main_mem(int argc, char *argv[])
     
     if (is_o) {
         fclose(aux.fp);
+    }
+
+    if (useLearned && !useErt) {
+        learned_index_cleanup();
     }
 
     // new bwt/FMI

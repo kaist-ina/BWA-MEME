@@ -100,6 +100,7 @@ typedef struct mem_opt_t {
     int max_occ;            // skip a seed if its occurence is larger than this value
     int max_chain_gap;      // do not chain seed if it is max_chain_gap-bp away from the closest seed
     int n_threads;          // number of threads
+    int use_simd8_encode;   // 1: use SIMD-accelerated read encoding + batch P-RMI lookup (-8 mode)
     int64_t chunk_size;         // process chunk_size-bp sequences in a batch
     float mask_level;       // regard a hit as redundant if the overlap with another better hit is over mask_level times the min length of the two hits
     float drop_ratio;       // drop a chain if its seed coverage is below drop_ratio times the seed coverage of a better chain overlapping with the small chain
@@ -315,8 +316,8 @@ int mem_kernel1_core_Learned(const mem_opt_t *opt,
                          uint8_t* sa_pos,
                          uint8_t* ref2sa,
                          uint8_t* ref_string,
-                         mem_tlv* smems,
-                         u64v* hits,
+                         mem_tlv* batch_smems_base,
+                         u64v*    batch_hits_base,
                          int tid);
 
 int mem_kernel1_core_ert(const mem_opt_t *opt,

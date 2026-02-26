@@ -176,6 +176,7 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #define PE26 112
 #define ERT_SEED_CHAIN 113
 #define LEARNED_SEED_CHAIN 114
+#define LEARNED_EXACT_MEME 115
 
 //////////////////////
 // ERT macros

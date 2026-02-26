@@ -150,6 +150,7 @@ mem_opt_t *mem_opt_init()
     o->split_factor = 1.5;
     o->chunk_size = 10000000;
     o->n_threads = 1;
+    o->use_simd8_encode = 0;
     o->max_XA_hits = 5;
     o->max_XA_hits_alt = 200;
     o->max_matesw = 50;
@@ -1238,99 +1239,243 @@ int mem_kernel1_core_Learned(const mem_opt_t *opt,
                          uint8_t* sa_pos,
                          uint8_t* ref2sa,
                          uint8_t* ref_string,
-                         mem_tlv* smems,
-                         u64v* hits,
+                         mem_tlv* batch_smems_base,
+                         u64v*    batch_hits_base,
                          int tid)
 {
     int i,k ;
     mem_chain_v *chn;
     int64_t seedBufCount = 0;
     uint64_t tim = __rdtsc();
-    for (int l=0; l<nseq; l++)
+    learned_set_simd8_mode(opt->use_simd8_encode);
+    bsw_set_simd8_mode(opt->use_simd8_encode);  /* -8: enable BSW prefetch */
+
+    /* =========================================================
+     * -8 mode: process reads in batches of INTER_READ_BATCH
+     *          using pivot-level lock-step seeding to overlap
+     *          SA DRAM accesses across reads.
+     * -7 mode: original single-read loop (unchanged).
+     * ======================================================= */
+    if (opt->use_simd8_encode)
     {
-        smems->n = 0;
-        hits->n = 0;
-        char *seq = seq_[l].seq;
-        int len = seq_[l].l_seq;
-        int hasN = 0;
-        if (strchr(seq, 'N') || strchr(seq, 'n')) {
-            hasN = 1;
+        /* ---- -8 batch seeding path ---- */
+
+        /* Shift-buffer size per read */
+        const int SB_SZ = LEARNED_MAX_READ_LEN / 4 + 1;  /* bytes */
+        const int RC_SZ = ERT_MAX_READ_LEN;
+
+        /* Allocate per-batch shift buffers on the heap.
+         * Layout: [INTER_READ_BATCH][8 x SB_SZ] forward+RC shift buffers
+         *         [INTER_READ_BATCH][RC_SZ]      RC queue buffers         */
+        uint8_t (*batch_shift_bufs)[8][SB_SZ] =
+            (uint8_t (*)[8][SB_SZ]) malloc(INTER_READ_BATCH * 8 * SB_SZ);
+        uint8_t (*batch_rc_buf)[RC_SZ] =
+            (uint8_t (*)[RC_SZ]) malloc(INTER_READ_BATCH * RC_SZ);
+
+        /* Per-read auxiliary structs (on heap to keep stack lean) */
+        Learned_read_aux_t  batch_raux[INTER_READ_BATCH];
+        Learned_index_aux_t batch_iaux[INTER_READ_BATCH];
+        /* Use persistent per-thread smems/hits buffers (allocated once in fastmap.cpp)
+         * to avoid repeated malloc/free churn that causes RSS growth / OOM.
+         * Slot layout: batch_smems_base[bi], batch_hits_base[bi]  (bi=0..INTER_READ_BATCH-1) */
+        bool     batch_hasN [INTER_READ_BATCH];
+
+        /* Pointer arrays passed to the batch seeding function */
+        Learned_read_aux_t*  raux_arr [INTER_READ_BATCH];
+        Learned_index_aux_t* iaux_arr [INTER_READ_BATCH];
+        mem_tlv*             smems_arr[INTER_READ_BATCH];
+        u64v*                hits_arr [INTER_READ_BATCH];
+
+        const int split_len_global = (int)(opt->min_seed_len * opt->split_factor + .499);
+
+        /* Wire up pointer arrays to persistent buffers (no kv_init needed here) */
+        for (int bi = 0; bi < INTER_READ_BATCH; bi++) {
+            raux_arr [bi] = &batch_raux [bi];
+            iaux_arr [bi] = &batch_iaux [bi];
+            smems_arr[bi] = &batch_smems_base[bi];
+            hits_arr [bi] = &batch_hits_base [bi];
         }
-        if (len > LEARNED_MAX_READ_LEN) {
-            fprintf(stderr, "Your dataset has reads with length %d. Change the LEARNED_MAX_READ_LEN in marco.h and recompile to run\n", len);
-            exit(EXIT_FAILURE);
+
+        for (int l = 0; l < nseq; l += INTER_READ_BATCH)
+        {
+            int batch_sz = (l + INTER_READ_BATCH <= nseq) ? INTER_READ_BATCH
+                                                           : (nseq - l);
+
+            /* ── Step 1: encode all reads in the batch ── */
+            for (int bi = 0; bi < batch_sz; bi++) {
+                int rl  = l + bi;
+                char   *seq = seq_[rl].seq;
+                int     len = seq_[rl].l_seq;
+
+                if (len > LEARNED_MAX_READ_LEN) {
+                    fprintf(stderr, "Your dataset has reads with length %d. "
+                            "Change the LEARNED_MAX_READ_LEN in marco.h and recompile to run\n", len);
+                    exit(EXIT_FAILURE);
+                }
+
+                /* Convert bases and build RC buffer */
+                uint8_t *rc_buf = batch_rc_buf[bi];
+                for (i = 0; i < len; ++i) {
+                    seq[i] = seq[i] < 4 ? seq[i] : nst_nt4_table[(int)seq[i]];
+                    rc_buf[len - i - 1] = seq[i] < 4 ? 3 - seq[i] : 4;
+                }
+
+                /* Build 8 shift buffers via SIMD in one pass */
+                uint8_t *s1 = batch_shift_bufs[bi][0], *s2 = batch_shift_bufs[bi][1];
+                uint8_t *s3 = batch_shift_bufs[bi][2], *s4 = batch_shift_bufs[bi][3];
+                uint8_t *r1 = batch_shift_bufs[bi][4], *r2 = batch_shift_bufs[bi][5];
+                uint8_t *r3 = batch_shift_bufs[bi][6], *r4 = batch_shift_bufs[bi][7];
+                encode_read_simd8(seq, len, s1, s2, s3, s4, r1, r2, r3, r4);
+
+                /* Detect Ns */
+                batch_hasN[bi] = (strchr(seq, 'N') || strchr(seq, 'n')) ? true : false;
+
+                /* Fill raux */
+                Learned_read_aux_t *raux = &batch_raux[bi];
+                raux->unpacked_queue_binary_buf_shift1 = s1;
+                raux->unpacked_queue_binary_buf_shift2 = s2;
+                raux->unpacked_queue_binary_buf_shift3 = s3;
+                raux->unpacked_queue_binary_buf_shift4 = s4;
+                raux->unpacked_rc_queue_binary_buf_shift1 = r1;
+                raux->unpacked_rc_queue_binary_buf_shift2 = r2;
+                raux->unpacked_rc_queue_binary_buf_shift3 = r3;
+                raux->unpacked_rc_queue_binary_buf_shift4 = r4;
+                raux->min_seed_len   = opt->min_seed_len;
+                raux->l_seq          = len;
+                raux->max_l_seq      = 0;
+                raux->read_name      = seq_[rl].name;
+                raux->unpacked_queue_buf    = (uint8_t*) seq;
+                raux->unpacked_rc_queue_buf = rc_buf;
+                raux->min_intv_limit = 1;
+
+                /* Fill iaux */
+                Learned_index_aux_t *iaux = &batch_iaux[bi];
+                iaux->sa_pos      = sa_pos;
+                iaux->ref2sa      = ref2sa;
+                iaux->bns         = bns;
+                iaux->pac         = pac;
+                iaux->ref_string  = ref_string;
+
+                /* Reset smems/hits for this slot */
+                batch_smems_base[bi].n = 0;
+                batch_hits_base [bi].n = 0;
+            }
+
+            /* ── Step 2: pivot-level lock-step seeding (batch) ── */
+            uint64_t exact_meme_tim = __rdtsc();
+            Learned_getSMEMsAllPos_inter_read_batch(
+                iaux_arr, raux_arr, smems_arr, hits_arr, batch_hasN,
+                batch_sz, split_len_global, opt->split_width,
+                opt->max_mem_intv, opt->min_seed_len + 1);
+            tprof[LEARNED_EXACT_MEME][tid] += __rdtsc() - exact_meme_tim;
+
+            /* ── Step 3: sort + chain each read in the batch ── */
+            for (int bi = 0; bi < batch_sz; bi++) {
+                int rl  = l + bi;
+                int len = seq_[rl].l_seq;
+                mem_tlv *bsmems = &batch_smems_base[bi];
+                u64v    *bhits  = &batch_hits_base [bi];
+
+                ks_introsort(mem_smem_sort_lt_learned, bsmems->n, bsmems->a);
+
+                kv_init(chain_ar[rl]);
+                mem_chain_Learned(opt, bns, len,
+                                  bsmems, &chain_ar[rl], rl,
+                                  bhits,
+                                  seedBuf, seedBufSize, seedBufCount,
+                                  tid);
+                chn = &chain_ar[rl];
+                chn->n = mem_chain_flt(opt, chn->n, chn->a, tid);
+                mem_flt_chained_seeds(opt, bns, pac, seq_, chn->n, chn->a);
+            }
         }
 
-        // make binary read data
-        uint8_t unpacked_queue_binary_buf_shift1[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_queue_binary_buf_shift2[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_queue_binary_buf_shift3[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_queue_binary_buf_shift4[LEARNED_MAX_READ_LEN/4+1];
+        /* Free transient per-batch buffers; persistent smems/hits owned by caller */
+        free(batch_shift_bufs);
+        free(batch_rc_buf);
+    }
+    else
+    {
+        /* ---- -7 mode: original single-read loop (unchanged) ---- */
+        for (int l=0; l<nseq; l++)
+        {
+            batch_smems_base[0].n = 0;
+            batch_hits_base[0].n = 0;
+            char *seq = seq_[l].seq;
+            int len = seq_[l].l_seq;
+            int hasN = 0;
+            if (strchr(seq, 'N') || strchr(seq, 'n')) {
+                hasN = 1;
+            }
+            if (len > LEARNED_MAX_READ_LEN) {
+                fprintf(stderr, "Your dataset has reads with length %d. Change the LEARNED_MAX_READ_LEN in marco.h and recompile to run\n", len);
+                exit(EXIT_FAILURE);
+            }
 
-        uint8_t unpacked_rc_queue_binary_buf_shift1[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_rc_queue_binary_buf_shift2[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_rc_queue_binary_buf_shift3[LEARNED_MAX_READ_LEN/4+1];
-        uint8_t unpacked_rc_queue_binary_buf_shift4[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_queue_binary_buf_shift1[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_queue_binary_buf_shift2[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_queue_binary_buf_shift3[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_queue_binary_buf_shift4[LEARNED_MAX_READ_LEN/4+1];
 
-        uint8_t unpacked_rc_queue_buf[ERT_MAX_READ_LEN];
-        assert(len <= ERT_MAX_READ_LEN);
-        for (i = 0; i < len; ++i) {
-            seq[i] = seq[i] < 4? seq[i] : nst_nt4_table[(int)seq[i]]; //nst_nt4??
-            unpacked_rc_queue_buf[len - i - 1] = seq[i] < 4 ? 3 - seq[i] : 4; 
-        }
+            uint8_t unpacked_rc_queue_binary_buf_shift1[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_rc_queue_binary_buf_shift2[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_rc_queue_binary_buf_shift3[LEARNED_MAX_READ_LEN/4+1];
+            uint8_t unpacked_rc_queue_binary_buf_shift4[LEARNED_MAX_READ_LEN/4+1];
 
-         //8-bit representation to 2-bit representation
-        uint8_t set_bit=0;
-        uint8_t set_rc_bit=0;
-        // fprintf(stderr, "Query:");
-        Learned_read_aux_t raux;
-        for (k=0; k < len; ++k) {
-            // unpacked_rc_queue_buf[len - k - 1] = seq[k] < 4 ? 3 - seq[k] : 4; 
+            uint8_t unpacked_rc_queue_buf[ERT_MAX_READ_LEN];
+            assert(len <= ERT_MAX_READ_LEN);
+            for (i = 0; i < len; ++i) {
+                seq[i] = seq[i] < 4? seq[i] : nst_nt4_table[(int)seq[i]];
+                unpacked_rc_queue_buf[len - i - 1] = seq[i] < 4 ? 3 - seq[i] : 4;
+            }
 
-            set_bit = set_bit<<2;
-            set_rc_bit = set_rc_bit <<2;
+            Learned_read_aux_t raux;
+            /* -7 mode: original scalar encoding */
+            uint8_t set_bit=0;
+            uint8_t set_rc_bit=0;
+            for (k=0; k < len; ++k) {
+                set_bit = set_bit<<2;
+                set_rc_bit = set_rc_bit <<2;
+                set_bit |= seq[k] < 4? seq[k] : 0;
+                set_rc_bit |=  seq[len-1 -k] < 4 ? 3 - seq[len-1-k] : 0;
+                if ((k&3) == 0){
+                    unpacked_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 1){
+                    unpacked_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 2){
+                    unpacked_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 3){
+                    unpacked_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+            }
+            for (;k < len+4;++k){
+                set_bit = set_bit<<2;
+                set_rc_bit = set_rc_bit <<2;
+                if ((k&3) == 0){
+                    unpacked_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 1){
+                    unpacked_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 2){
+                    unpacked_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+                else if((k&3) == 3){
+                    unpacked_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_bit];
+                    unpacked_rc_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_rc_bit];
+                }
+            }
 
-            set_bit |= seq[k] < 4? seq[k] : 0;
-            set_rc_bit |=  seq[len-1 -k] < 4 ? 3 - seq[len-1-k] : 0; 
-            if ((k&3) == 0){
-                unpacked_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 1){
-                unpacked_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 2){
-                unpacked_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 3){
-                unpacked_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_rc_bit];
-                // fprintf(stderr,"%d", seq[k]);
-            }
-        }
-        for (;k < len+4;++k){
-            set_bit = set_bit<<2;
-            set_rc_bit = set_rc_bit <<2;
-            if ((k&3) == 0){
-                unpacked_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift1[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 1){
-                unpacked_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift2[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 2){
-                unpacked_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift3[k>>2] = BitReverseTable256[set_rc_bit];
-            }
-            else if((k&3) == 3){
-                unpacked_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_bit];
-                unpacked_rc_queue_binary_buf_shift4[k>>2] = BitReverseTable256[set_rc_bit];
-                // fprintf(stderr,"%d", seq[k]);
-            }
-            // fprintf(stderr,"\n");
             raux.unpacked_queue_binary_buf_shift1 = unpacked_queue_binary_buf_shift1;
             raux.unpacked_queue_binary_buf_shift2 = unpacked_queue_binary_buf_shift2;
             raux.unpacked_queue_binary_buf_shift3 = unpacked_queue_binary_buf_shift3;
@@ -1341,74 +1486,52 @@ int mem_kernel1_core_Learned(const mem_opt_t *opt,
             raux.unpacked_rc_queue_binary_buf_shift3 = unpacked_rc_queue_binary_buf_shift3;
             raux.unpacked_rc_queue_binary_buf_shift4 = unpacked_rc_queue_binary_buf_shift4;
 
-        }
-#if 0
-        printf("=====> Processing read '%s' <=====\n", seq_[l].name);
-#endif
-        int split_len = (int)(opt->min_seed_len * opt->split_factor + .499);
-        Learned_index_aux_t iaux;
-        iaux.sa_pos = sa_pos;
-        // fix below , temporary fix for testing packed data
-        iaux.ref2sa = ref2sa;
-        iaux.bns = bns;
-        iaux.pac = pac;
-        iaux.ref_string = ref_string;
+            int split_len = (int)(opt->min_seed_len * opt->split_factor + .499);
+            Learned_index_aux_t iaux;
+            iaux.sa_pos = sa_pos;
+            iaux.ref2sa = ref2sa;
+            iaux.bns = bns;
+            iaux.pac = pac;
+            iaux.ref_string = ref_string;
 
-        
-        raux.min_seed_len = opt->min_seed_len;
-        raux.l_seq = len;
-        raux.max_l_seq = 0;
-        raux.read_name = seq_[l].name;
-        raux.unpacked_queue_buf = (uint8_t*) seq;
-        raux.unpacked_rc_queue_buf = unpacked_rc_queue_buf;
-        raux.min_intv_limit = 1;
-        
-        Learned_getSMEMsAllPosOneThread(&iaux, &raux, smems, hits, hasN, split_len,opt->split_width);
+            raux.min_seed_len = opt->min_seed_len;
+            raux.l_seq = len;
+            raux.max_l_seq = 0;
+            raux.read_name = seq_[l].name;
+            raux.unpacked_queue_buf = (uint8_t*) seq;
+            raux.unpacked_rc_queue_buf = unpacked_rc_queue_buf;
+            raux.min_intv_limit = 1;
 
-        // int smem_num_1 = smems->n;
-        // for (int k = 0; k < smem_num_1; ++k) {
-                
-        //     int qbeg = smems->a[k].start;
-            
-        //     int qend = smems->a[k].end;
-        //     if ((qend - qbeg) < split_len || smems->a[k].hitcount > opt->split_width) {
-        //         continue;
-        //     }
-        //     set_forward_pivot(&raux, (qbeg + qend) >> 1);
-        //     raux.min_intv_limit = smems->a[k].hitcount+1;
-            
+            uint64_t exact_meme_tim = __rdtsc();
+            Learned_getSMEMsAllPosOneThread(&iaux, &raux, &batch_smems_base[0], &batch_hits_base[0], hasN, split_len, opt->split_width);
+            tprof[LEARNED_EXACT_MEME][tid] += __rdtsc() - exact_meme_tim;
 
-        //     Learned_getSMEMsOnePosOneThread(&iaux,&raux, smems, hits, hasN);
-        // }
-
-
-        if (opt->max_mem_intv > 0)
-        {
-            raux.min_intv_limit = opt->max_mem_intv;
-            raux.min_seed_len = opt->min_seed_len+1;
-            if (raux.max_l_seq != 0){
-                Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(&iaux, &raux, smems, hits, hasN);        
-            }else{
-                Learned_bwtSeedStrategyAllPosOneThread(&iaux, &raux, smems, hits, hasN);        
+            if (opt->max_mem_intv > 0)
+            {
+                raux.min_intv_limit = opt->max_mem_intv;
+                raux.min_seed_len = opt->min_seed_len+1;
+                if (raux.max_l_seq != 0){
+                    Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(&iaux, &raux, &batch_smems_base[0], &batch_hits_base[0], hasN);
+                }else{
+                    Learned_bwtSeedStrategyAllPosOneThread(&iaux, &raux, &batch_smems_base[0], &batch_hits_base[0], hasN);
+                }
             }
-        }
-        
-        
-        ks_introsort(mem_smem_sort_lt_learned, smems->n, smems->a);
-        
-        kv_init(chain_ar[l]);
-        mem_chain_Learned(opt, bns, len, //(uint8_t*)seq, 
-                      smems, &chain_ar[l], l, 
-                      hits, 
-                      seedBuf, seedBufSize, seedBufCount, 
-                      tid);
-        chn = &chain_ar[l];
-        chn->n = mem_chain_flt(opt, chn->n, chn->a, tid);
-        mem_flt_chained_seeds(opt, bns, pac, seq_, chn->n, chn->a);
-        // printf("smem->n: %d chn-?>n:%d\n",smems->n, chn->n);
 
+            ks_introsort(mem_smem_sort_lt_learned, batch_smems_base[0].n, batch_smems_base[0].a);
+
+            kv_init(chain_ar[l]);
+            mem_chain_Learned(opt, bns, len,
+                          &batch_smems_base[0], &chain_ar[l], l,
+                          &batch_hits_base[0],
+                          seedBuf, seedBufSize, seedBufCount,
+                          tid);
+            chn = &chain_ar[l];
+            chn->n = mem_chain_flt(opt, chn->n, chn->a, tid);
+            mem_flt_chained_seeds(opt, bns, pac, seq_, chn->n, chn->a);
+        }
     }
     tprof[LEARNED_SEED_CHAIN][tid] += __rdtsc() - tim;
+
     return 1;
 }
 
@@ -1777,8 +1900,9 @@ static void worker_bwt(void *data, long seq_id, long batch_size, int tid)
                              w->sa_position,
                              w->ref2sa,
                              w->ref_string,
-                             w->l_smems + (tid * MAX_LINE_LEN),
-                             w->hits_ar + (tid * MAX_LINE_LEN), 
+                             /* persistent INTER_READ_BATCH slots for this thread */
+                             w->l_smems + (tid * INTER_READ_BATCH),
+                             w->hits_ar + (tid * INTER_READ_BATCH),
                              tid);
 
     }
@@ -2568,6 +2692,52 @@ inline void sortPairsLen(SeqPair *pairArray, int32_t count, SeqPair *tempArray, 
 }
 
 /* Restructured BSW parent function */
+
+/* -------------------------------------------------------
+ * -8 mode: AVX-512 accelerated memory copy helpers
+ * memcpy_rev_simd8:  dst[i] = src[len-1-i]   (reverse copy)
+ * memcpy_fwd_simd8:  dst[i] = src[off+i]      (forward copy)
+ * Falls back to scalar for len < 16.
+ * ------------------------------------------------------- */
+#if __AVX512BW__
+#include <immintrin.h>
+
+static inline void memcpy_rev_simd8(uint8_t* __restrict__ dst,
+                                     const uint8_t* __restrict__ src,
+                                     int64_t len)
+{
+    /* Reverse copy using 16-byte SSSE3 shuffles (AVX512BW build, no VBMI needed).
+     * Process 16 bytes at a time from the tail of src, shuffle bytes within
+     * each 16-byte lane, then store forward into dst.
+     */
+    static const uint8_t _rev16_idx[16] = {
+        15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
+    };
+    __m128i vidx = _mm_loadu_si128((const __m128i*)_rev16_idx);
+
+    int64_t i = 0;
+    for (; i + 16 <= len; i += 16) {
+        __m128i v = _mm_loadu_si128((const __m128i*)(src + len - i - 16));
+        v = _mm_shuffle_epi8(v, vidx);
+        _mm_storeu_si128((__m128i*)(dst + i), v);
+    }
+    /* scalar tail */
+    for (; i < len; ++i) dst[i] = src[len - 1 - i];
+}
+
+static inline void memcpy_fwd_simd8(uint8_t* __restrict__ dst,
+                                     const uint8_t* __restrict__ src,
+                                     int len)
+{
+    int i = 0;
+    for (; i + 64 <= len; i += 64) {
+        __m512i v = _mm512_loadu_si512((const __m512i*)(src + i));
+        _mm512_storeu_si512((__m512i*)(dst + i), v);
+    }
+    for (; i < len; ++i) dst[i] = src[i];
+}
+#endif /* __AVX512BW__ */
+
 #define FAC 8
 #define PFD 2
 void mem_chain2aln_across_reads_V2(const mem_opt_t *opt, const bntseq_t *bns,
@@ -2775,6 +2945,11 @@ void mem_chain2aln_across_reads_V2(const mem_opt_t *opt, const bntseq_t *bns,
                     }
                     
                     uint8_t *qs = seqBufLeftQer + sp.idq;
+#if __AVX512BW__
+                    if (opt->use_simd8_encode) {
+                        memcpy_rev_simd8(qs, query, s->qbeg);
+                    } else
+#endif
                     for (int i = 0; i < s->qbeg; ++i) qs[i] = query[s->qbeg - 1 - i];
                     
                     tmp = s->rbeg - rmax[0];
@@ -2795,6 +2970,11 @@ void mem_chain2aln_across_reads_V2(const mem_opt_t *opt, const bntseq_t *bns,
                     }
                     
                     uint8_t *rs = seqBufLeftRef + sp.idr;                    
+#if __AVX512BW__
+                    if (opt->use_simd8_encode) {
+                        memcpy_rev_simd8(rs, rseq, tmp);
+                    } else
+#endif
                     for (int64_t i = 0; i < tmp; ++i) rs[i] = rseq[tmp - 1 - i]; //seq1
                     
                     sp.len2 = s->qbeg;
@@ -2893,9 +3073,18 @@ void mem_chain2aln_across_reads_V2(const mem_opt_t *opt, const bntseq_t *bns,
                     uint8_t *qs = seqBufRightQer + sp.idq;
                     uint8_t *rs = seqBufRightRef + sp.idr;
 
+#if __AVX512BW__
+                    if (opt->use_simd8_encode) {
+                        memcpy_fwd_simd8(qs, query + qe, sp.len2);
+                        memcpy_fwd_simd8(rs, rseq  + re, sp.len1);
+                    } else {
+#endif
                     for (int i = 0; i < sp.len2; ++i) qs[i] = query[qe + i];
 
                     for (int i = 0; i < sp.len1; ++i) rs[i] = rseq[re + i]; //seq1
+#if __AVX512BW__
+                    }
+#endif
 
                     int minval = sp.h0 + min_(sp.len1, sp.len2) * opt->a;
                     

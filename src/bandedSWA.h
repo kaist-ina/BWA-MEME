@@ -341,4 +341,6 @@ private:
 #define DP2 6
 #define DP3 7
 
+void bsw_set_simd8_mode(int enable);
+
 #endif

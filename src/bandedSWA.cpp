@@ -28,6 +28,10 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 *****************************************************************************************/
 
 #include "bandedSWA.h"
+/* -8 mode flag for BSW optimizations */
+static int g_bsw_simd8 = 0;
+void bsw_set_simd8_mode(int enable) { g_bsw_simd8 = enable; }
+
 #ifdef VTUNE_ANALYSIS
 #include <ittnotify.h> 
 #endif
@@ -2440,6 +2444,12 @@ void BandedPairWiseSW::smithWaterman512_8(uint8_t seq1SoA[],
         for(j = beg; j < end; j++)
         {
             __m512i f11, f21, f31, f41, f51, jj512, s2;
+            /* -8 mode: prefetch H_h/F/seq2SoA 4 steps ahead to hide DRAM latency */
+            if (g_bsw_simd8) {
+                _mm_prefetch((const char*)(H_h + (j+4) * SIMD_WIDTH8), _MM_HINT_T0);
+                _mm_prefetch((const char*)(F   + (j+4) * SIMD_WIDTH8), _MM_HINT_T0);
+                _mm_prefetch((const char*)(seq2SoA + (j+4) * SIMD_WIDTH8), _MM_HINT_T0);
+            }
             h00 = _mm512_load_si512((__m512i *)(H_h + j * SIMD_WIDTH8));
             f11 = _mm512_load_si512((__m512i *)(F + j * SIMD_WIDTH8));
 
@@ -2543,6 +2553,11 @@ void BandedPairWiseSW::smithWaterman512_8(uint8_t seq1SoA[],
         int l;      
         for (l = beg; l < end; l++)
         {
+            /* -8: prefetch ahead in narrowing scan */
+            if (g_bsw_simd8) {
+                _mm_prefetch((const char*)(F   + (l+4) * SIMD_WIDTH8), _MM_HINT_T0);
+                _mm_prefetch((const char*)(H_h + (l+4) * SIMD_WIDTH8), _MM_HINT_T0);
+            }
             __m512i f512 = _mm512_load_si512((__m512i *)(F + l * SIMD_WIDTH8));
             __m512i h512 = _mm512_load_si512((__m512i *)(H_h + l * SIMD_WIDTH8));
             __m512i tmp = _mm512_or_si512(f512, h512);
@@ -2556,6 +2571,11 @@ void BandedPairWiseSW::smithWaterman512_8(uint8_t seq1SoA[],
         bool flg = 1;
         for (l = end; l >= beg; l--)
         {
+            /* -8: prefetch ahead (descending) in narrowing scan */
+            if (g_bsw_simd8) {
+                _mm_prefetch((const char*)(F   + (l-4) * SIMD_WIDTH8), _MM_HINT_T0);
+                _mm_prefetch((const char*)(H_h + (l-4) * SIMD_WIDTH8), _MM_HINT_T0);
+            }
             __m512i f512 = _mm512_load_si512((__m512i *)(F + l * SIMD_WIDTH8));
             __m512i h512 = _mm512_load_si512((__m512i *)(H_h + l * SIMD_WIDTH8));
             __m512i tmp = _mm512_or_si512(f512, h512);

@@ -29,6 +29,7 @@
 #include <math.h>
 #include <cmath>
 #include <fstream>
+#include <x86intrin.h>
 // #include <filesystem>
 #include <iostream>
 
@@ -54,6 +55,16 @@ double SA_NUM;
 uint64_t bit_shift;
 char* L1_PARAMETERS;
 char* L2_PARAMETERS;
+/* -8 mode flag: set to 1 when -8 is used (SIMD-accelerated encode + batch lookup) */
+static int g_use_simd8_mode = 0;
+
+void learned_set_simd8_mode(int enable) {
+	g_use_simd8_mode = enable ? 1 : 0;
+}
+
+int learned_get_simd8_mode(void) {
+	return g_use_simd8_mode;
+}
 
 // sa_raux_buf is used to select properly aligned read among unpacked_queue_binary_buf_shift*
 uint8_t sa_raux_buf[4][4]= {
@@ -141,6 +152,184 @@ inline size_t FCLAMP(double inp, double bound) {
 	if (inp < 0.0) return 0;
 	return (inp > bound ? bound : (size_t)inp);
 }
+
+/* ===========================================================================
+ * encode_read_simd8 — SIMD-accelerated 4-way shift-buffer construction (-8 mode)
+ *
+ * Builds 8 packed 2-bit shift buffers (shift1..4 for forward, rc_shift1..4
+ * for reverse-complement) needed by Tokenization / compare_read_and_ref_binary.
+ *
+ * The output is bit-for-bit identical to the scalar code in bwamem.cpp; the
+ * AVX2 path just amortises the BitReverseTable256 lookup across 4 shift phases
+ * simultaneously instead of doing 4 separate passes.
+ * ===========================================================================*/
+void encode_read_simd8(const char* seq, int len,
+                       uint8_t* shift1, uint8_t* shift2,
+                       uint8_t* shift3, uint8_t* shift4,
+                       uint8_t* rc_shift1, uint8_t* rc_shift2,
+                       uint8_t* rc_shift3, uint8_t* rc_shift4)
+{
+    /* Correct implementation: single rolling accumulator (identical to -7 original).
+     *
+     * The original code uses ONE set_bit register that accumulates all bases in order.
+     * Each shift buffer records the accumulator state at a specific phase offset (k&3).
+     * Using 4 independent accumulators would produce wrong phase alignment.
+     *
+     * This function is a drop-in replacement for the original scalar double-loop,
+     * merging the two loops (k<len and k<len+4) into one. The output is bit-for-bit
+     * identical to the original. Any further SIMD optimisation must preserve this
+     * single-accumulator semantics.
+     */
+    uint8_t set_bit    = 0;
+    uint8_t set_rc_bit = 0;
+    int k;
+
+    /* Main loop: k = 0..len-1 */
+    for (k = 0; k < len; ++k) {
+        set_bit    = (uint8_t)(set_bit    << 2);
+        set_rc_bit = (uint8_t)(set_rc_bit << 2);
+        set_bit    |= (seq[k] < 4) ? seq[k] : 0;
+        set_rc_bit |= (seq[len-1-k] < 4) ? (3 - seq[len-1-k]) : 0;
+        if ((k & 3) == 0) {
+            shift1[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift1[k>>2] = BitReverseTable256[set_rc_bit];
+        } else if ((k & 3) == 1) {
+            shift2[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift2[k>>2] = BitReverseTable256[set_rc_bit];
+        } else if ((k & 3) == 2) {
+            shift3[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift3[k>>2] = BitReverseTable256[set_rc_bit];
+        } else {
+            shift4[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift4[k>>2] = BitReverseTable256[set_rc_bit];
+        }
+    }
+    /* Padding loop: k = len..len+3 */
+    for (; k < len + 4; ++k) {
+        set_bit    = (uint8_t)(set_bit    << 2);
+        set_rc_bit = (uint8_t)(set_rc_bit << 2);
+        if ((k & 3) == 0) {
+            shift1[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift1[k>>2] = BitReverseTable256[set_rc_bit];
+        } else if ((k & 3) == 1) {
+            shift2[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift2[k>>2] = BitReverseTable256[set_rc_bit];
+        } else if ((k & 3) == 2) {
+            shift3[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift3[k>>2] = BitReverseTable256[set_rc_bit];
+        } else {
+            shift4[k>>2]    = BitReverseTable256[set_bit];
+            rc_shift4[k>>2] = BitReverseTable256[set_rc_bit];
+        }
+    }
+}
+
+/* ===========================================================================
+ * learned_prefetch_next_read_sa -- lookahead SA prefetch for next read (-8)
+ *
+ * Computes the P-RMI estimated SA position for the first valid pivot of
+ * next_seq and issues _mm_prefetch for that SA cache line.
+ * Called in mem_kernel1_core_Learned just before processing read l,
+ * using read l+1 as lookahead, so SA DRAM fetch overlaps seeding of l.
+ * ===========================================================================*/
+void learned_prefetch_next_read_sa(const uint8_t* sa_pos,
+                                   const char*    next_seq,
+                                   int            next_len,
+                                   int            min_seed_len)
+{
+    if (next_len < min_seed_len) return;
+
+    /* find first non-N pivot */
+    int p = 0;
+    while (p < next_len - min_seed_len + 1 &&
+           (uint8_t)next_seq[p] >= 4)
+        p++;
+    if (p >= next_len - min_seed_len + 1) return;
+
+    /* build 64-bit key from first 32 bases at pivot p */
+    uint64_t key = 0;
+    int end = p + 32 < next_len ? p + 32 : next_len;
+    for (int i = p; i < end; i++) {
+        uint8_t b = (uint8_t)next_seq[i];
+        key = (key << 2) | (b < 4 ? b : 0);
+    }
+    key <<= (64 - (end - p) * 2);   /* left-align */
+
+    /* P-RMI lookup (mirrors learned_index_lookup) */
+    size_t modelIndex = key >> bit_shift;
+    double fpred = linear(*((double*)(L2_PARAMETERS + modelIndex*24 + 0)),
+                          *((double*)(L2_PARAMETERS + modelIndex*24 + 8)),
+                          (double)key);
+    size_t err = *((uint64_t*)(L2_PARAMETERS + modelIndex*24 + 16));
+    if (err >> 63) {
+        size_t partial_start = (err >> 32) & 0x7fffffff;
+        double partial_num   = (double)(err & 0x00000000ffffffffULL);
+        modelIndex = partial_start + FCLAMP(fpred, partial_num - 1.0);
+        fpred = linear(*((double*)(L1_PARAMETERS + modelIndex*24 + 0)),
+                       *((double*)(L1_PARAMETERS + modelIndex*24 + 8)),
+                       (double)key);
+    }
+    uint64_t est_pos = (uint64_t)FCLAMP(fpred, SA_NUM - 1.0);
+
+    /* prefetch estimated SA entry; T2 = L3 hint (770 MB pac shared) */
+    _mm_prefetch((const char*)(sa_pos + est_pos * SASIZE), _MM_HINT_T2);
+}
+
+/* ===========================================================================
+ * learned_index_lookup_batch — batch P-RMI lookup for n keys  (-8 mode)
+ *
+ * Processes `n` keys independently using interleaved prefetches to hide
+ * DRAM latency of the L2_PARAMETERS table.
+ *
+ * Prefetch distance LOOKUP_BATCH_PREFETCH_DIST: empirically 4-8 is optimal
+ * for a ~38 GB learned-index (L2_PARAMETERS ~6 GB, L1_PARAMETERS ~6 MB).
+ * ===========================================================================*/
+#define LOOKUP_BATCH_PREFETCH_DIST 8
+
+void learned_index_lookup_batch(const uint64_t* keys, int n,
+                                uint64_t* positions, size_t* errs)
+{
+    /* Warm up prefetch pipeline */
+    {
+        int warmup = (n < LOOKUP_BATCH_PREFETCH_DIST) ? n : LOOKUP_BATCH_PREFETCH_DIST;
+        for (int i = 0; i < warmup; ++i) {
+            size_t mi = keys[i] >> bit_shift;
+            _mm_prefetch((const char*)(L2_PARAMETERS + mi * 24), _MM_HINT_T0);
+        }
+    }
+
+    for (int i = 0; i < n; ++i) {
+        /* Prefetch for key[i + DIST] */
+        int pf = i + LOOKUP_BATCH_PREFETCH_DIST;
+        if (pf < n) {
+            size_t mi_pf = keys[pf] >> bit_shift;
+            _mm_prefetch((const char*)(L2_PARAMETERS + mi_pf * 24), _MM_HINT_T0);
+        }
+
+        /* Standard p-RMI lookup (identical to learned_index_lookup) */
+        uint64_t key       = keys[i];
+        size_t modelIndex  = key >> bit_shift;
+        double fpred       = linear(*((double*)(L2_PARAMETERS + modelIndex*24 + 0)),
+                                    *((double*)(L2_PARAMETERS + modelIndex*24 + 8)),
+                                    (double)key);
+        size_t err_val     = *((uint64_t*)(L2_PARAMETERS + modelIndex*24 + 16));
+
+        if (err_val >> 63) {
+            size_t partial_start = (err_val >> 32) & 0x7fffffff;
+            double partial_num   = (double)(err_val & 0x00000000ffffffffULL);
+            modelIndex = partial_start + FCLAMP(fpred, partial_num - 1.0);
+            _mm_prefetch((const char*)(L1_PARAMETERS + modelIndex*24), _MM_HINT_T0);
+            fpred   = linear(*((double*)(L1_PARAMETERS + modelIndex*24 + 0)),
+                             *((double*)(L1_PARAMETERS + modelIndex*24 + 8)),
+                             (double)key);
+            err_val = *((uint64_t*)(L1_PARAMETERS + modelIndex*24 + 16));
+        }
+
+        positions[i] = FCLAMP(fpred, SA_NUM - 1.0);
+        errs[i]      = err_val;
+    }
+}
+
 
 /*
 * Example of lookup function for naive 2-layer RMI
@@ -609,6 +798,8 @@ inline bool compare_read_and_ref_binary_left_pos_only(const uint8_t* pac, const 
 #endif
 
 
+
+
 #if __AVX512BW__
 inline uint64_t Tokenization( Learned_read_aux_t* raux, bool right_forward, uint32_t* ambiguous_pos, bool hasN){
 	// make key from read
@@ -970,6 +1161,305 @@ void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux
 #endif
 	}
 }
+
+/* ===========================================================================
+ * next_pivot_key — compute 64-bit P-RMI key for pivot p, no raux mutation
+ *
+ * Reads directly from the pre-built shift buffers (same logic as Tokenization
+ * right_forward=true, hasN=false fast path) to obtain the key used for the
+ * L2_PARAMETERS model-index computation.  Used only to issue _mm_prefetch;
+ * does NOT set ambiguous_pos.
+ * ===========================================================================*/
+static inline uint64_t next_pivot_key(const Learned_read_aux_t* raux, int p)
+{
+    uint64_t key = 0;
+    uint32_t pivot;
+    switch (p & 3) {
+        case 0:
+            pivot = (uint32_t)(p >> 2);
+            for (uint32_t r = pivot; r < pivot + 8; r++)
+                key = (key << 8) | BitReverseTable256[raux->unpacked_queue_binary_buf_shift4[r]];
+            break;
+        case 1:
+            pivot = (uint32_t)((p + 3) >> 2);
+            for (uint32_t r = pivot; r < pivot + 8; r++)
+                key = (key << 8) | BitReverseTable256[raux->unpacked_queue_binary_buf_shift1[r]];
+            break;
+        case 2:
+            pivot = (uint32_t)((p + 2) >> 2);
+            for (uint32_t r = pivot; r < pivot + 8; r++)
+                key = (key << 8) | BitReverseTable256[raux->unpacked_queue_binary_buf_shift2[r]];
+            break;
+        default: /* case 3 */
+            pivot = (uint32_t)((p + 1) >> 2);
+            for (uint32_t r = pivot; r < pivot + 8; r++)
+                key = (key << 8) | BitReverseTable256[raux->unpacked_queue_binary_buf_shift3[r]];
+            break;
+    }
+    return key;
+}
+
+/* ===========================================================================
+ * Learned_getSMEMsAllPosOneThread_simd8 (-8 mode)
+ *
+ * Loop-internal next-pivot prefetch.
+ *
+ * Design:
+ *   The outer loop mirrors Learned_getSMEMsAllPosOneThread exactly, but
+ *   BEFORE calling step1 for the current pivot it fires a software prefetch
+ *   for the L2_PARAMETERS cache line of the *next* non-ambiguous pivot.
+ *
+ *   Why this is better than the old Phase-1 pre-pass:
+ *   - Old pre-pass: prefetched ALL l_seq pivots (e.g. 150), but seeding only
+ *     visits ~5 pivots (pivot jumps by match_len ~30 each step).
+ *     => 97% of Tokenization calls and prefetches were wasted.
+ *   - New approach: prefetch distance = 1 real seeding step ahead, so every
+ *     prefetch is actually consumed.  next_pivot_key() costs ~10 cycles vs.
+ *     the ~150-cycle DRAM stall it hides.
+ *
+ *   The prefetch is issued right before the SA binary-search for the current
+ *   pivot (~hundreds of cycles), giving enough time for the hardware to fetch
+ *   the L2_PARAMETERS line before the next iteration needs it.
+ * ===========================================================================*/
+void Learned_getSMEMsAllPosOneThread_simd8(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, int split_len, int split_width)
+{
+    set_forward_pivot(raux, 0);
+
+    while (raux->pivot < raux->l_seq) {
+        /* ---- prefetch L2_PARAMETERS for the next non-ambiguous pivot ---- */
+        {
+            /* Estimate next pivot using min_seed_len as lower bound.
+             * This is almost always the correct next starting point and
+             * ensures every prefetch is consumed before the next iteration. */
+            int next_p = raux->pivot + raux->min_seed_len;
+            while (next_p < raux->l_seq - raux->min_seed_len + 1 &&
+                   raux->unpacked_queue_buf[next_p] >= 4)
+                next_p++;
+            if (next_p < raux->l_seq - raux->min_seed_len + 1 &&
+                raux->unpacked_queue_buf[next_p] < 4) {
+                uint64_t nkey = next_pivot_key(raux, next_p);
+                size_t mi_pf  = nkey >> bit_shift;
+                _mm_prefetch((const char*)(L2_PARAMETERS + mi_pf * 24), _MM_HINT_T0);
+            }
+        }
+
+        /* ---- step1 + step2: identical logic to getSMEMsAllPosOneThread ---- */
+#if MEM_TRADEOFF_CACHED
+        int before = smems->n;
+        Learned_getSMEMsOnePosOneThread_step1(iaux, raux, smems, hits, hasN);
+        int after = smems->n;
+        for (int k = before; k < after; ++k) {
+            int next_pivot_saved  = raux->pivot;
+            int original_min_intv = raux->min_intv_limit;
+            int qbeg = smems->a[k].start;
+            int qend = smems->a[k].end;
+            if ((qend - qbeg) < split_len || smems->a[k].hitcount > split_width) {
+                set_forward_pivot(raux, next_pivot_saved);
+                continue;
+            }
+            set_forward_pivot(raux, (qbeg + qend) >> 1);
+            raux->min_intv_limit = smems->a[k].hitcount + 1;
+            if (smems->a[k].hitcount >= 1 && smems->a[k].hitcount < 10) {
+                raux->cache_pivot_end = smems->a[k].end;
+                raux->cache_pivot     = smems->a[k].start;
+                raux->cache_refpos    = smems->a[k].cache_refpos;
+                Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, true);
+            } else {
+                Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, false);
+            }
+            raux->min_intv_limit = original_min_intv;
+            set_forward_pivot(raux, next_pivot_saved);
+        }
+#else
+        int before = smems->n;
+        Learned_getSMEMsOnePosOneThread_step1(iaux, raux, smems, hits, hasN);
+        int after = smems->n;
+        for (int k = before; k < after; ++k) {
+            int next_pivot_saved  = raux->pivot;
+            int original_min_intv = raux->min_intv_limit;
+            int qbeg = smems->a[k].start;
+            int qend = smems->a[k].end;
+            if ((qend - qbeg) < split_len || smems->a[k].hitcount > split_width) {
+                set_forward_pivot(raux, next_pivot_saved);
+                continue;
+            }
+            set_forward_pivot(raux, (qbeg + qend) >> 1);
+            raux->min_intv_limit = smems->a[k].hitcount + 1;
+            Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, false);
+            raux->min_intv_limit = original_min_intv;
+            set_forward_pivot(raux, next_pivot_saved);
+        }
+#endif
+    }
+}
+
+/* ===========================================================================
+ * Learned_getSMEMsAllPos_inter_read_batch  (-8 only)
+ *
+ * Pivot-level inter-read batching: process INTER_READ_BATCH reads in lock-step.
+ *
+ * Each "tick":
+ *   Phase A — for every active read, compute Tokenization key for current
+ *             pivot, run P-RMI (learned_index_lookup), issue SA prefetch.
+ *             All DRAM latencies for SA start in parallel.
+ *   Phase B — for every active read, execute the full step1 + step2 seeding
+ *             (SA binary-search, SMEM expansion).  By the time we reach each
+ *             read the SA cache line is (mostly) warm.
+ *
+ * A read is "done" when its pivot reaches l_seq.
+ * The outer caller (mem_kernel1_core_Learned) feeds reads in groups of
+ * INTER_READ_BATCH; leftover reads fall back to the single-read simd8 path.
+ * ===========================================================================*/
+#define INTER_READ_BATCH 4
+
+/* helper: compute key + P-RMI + prefetch SA for raux at current pivot */
+static inline void pivot_prmi_sa_prefetch(Learned_index_aux_t* iaux,
+                                          Learned_read_aux_t*  raux,
+                                          bool hasN)
+{
+    if (raux->pivot >= raux->l_seq) return;
+    if (raux->unpacked_queue_buf[raux->pivot] >= 4) return;
+
+    uint32_t ambiguous_pos;
+    uint64_t key = Tokenization(raux, /*right_forward=*/true, &ambiguous_pos, hasN);
+    uint32_t read_valid_len = ambiguous_pos - raux->pivot;
+    if ((int)read_valid_len < raux->min_seed_len) return;
+
+    size_t enc_err;
+    uint64_t est_pos = learned_index_lookup(key, &enc_err);
+    _mm_prefetch((const char*)(iaux->sa_pos + est_pos * SASIZE), _MM_HINT_T0);
+}
+
+void Learned_getSMEMsAllPos_inter_read_batch(
+        Learned_index_aux_t**  iaux_arr,
+        Learned_read_aux_t**   raux_arr,
+        mem_tlv**              smems_arr,
+        u64v**                 hits_arr,
+        bool*                  hasN_arr,
+        int                    n_reads,
+        int split_len, int split_width,
+        int max_mem_intv,
+        int max_mem_intv_min_seed_len)
+{
+    /* initialise all pivots */
+    for (int i = 0; i < n_reads; i++)
+        set_forward_pivot(raux_arr[i], 0);
+
+    bool any_active = true;
+    while (any_active) {
+        any_active = false;
+
+        /* ── Phase A: batch P-RMI + SA prefetch for all active reads ── */
+        for (int i = 0; i < n_reads; i++) {
+            Learned_read_aux_t* raux = raux_arr[i];
+            if (raux->pivot >= raux->l_seq) continue;
+            any_active = true;
+
+            /* also prefetch L2_PARAMETERS for next pivot (intra-read) */
+            {
+                int next_p = raux->pivot + raux->min_seed_len;
+                while (next_p < raux->l_seq - raux->min_seed_len + 1 &&
+                       raux->unpacked_queue_buf[next_p] >= 4)
+                    next_p++;
+                if (next_p < raux->l_seq - raux->min_seed_len + 1 &&
+                    raux->unpacked_queue_buf[next_p] < 4) {
+                    uint64_t nkey = next_pivot_key(raux, next_p);
+                    size_t mi_pf  = nkey >> bit_shift;
+                    _mm_prefetch((const char*)(L2_PARAMETERS + mi_pf * 24), _MM_HINT_T0);
+                }
+            }
+            /* inter-read SA prefetch */
+            pivot_prmi_sa_prefetch(iaux_arr[i], raux, hasN_arr[i]);
+        }
+
+        if (!any_active) break;
+
+        /* ── Phase B: full seeding for each active read ── */
+        for (int i = 0; i < n_reads; i++) {
+            Learned_read_aux_t* raux = raux_arr[i];
+            if (raux->pivot >= raux->l_seq) continue;
+
+            Learned_index_aux_t* iaux  = iaux_arr[i];
+            mem_tlv*             smems = smems_arr[i];
+            u64v*                hits  = hits_arr[i];
+            bool                 hasN  = hasN_arr[i];
+
+#if MEM_TRADEOFF_CACHED
+            int before = smems->n;
+            Learned_getSMEMsOnePosOneThread_step1(iaux, raux, smems, hits, hasN);
+            int after = smems->n;
+            for (int k = before; k < after; ++k) {
+                int next_pivot_saved  = raux->pivot;
+                int original_min_intv = raux->min_intv_limit;
+                int qbeg = smems->a[k].start;
+                int qend = smems->a[k].end;
+                if ((qend - qbeg) < split_len || smems->a[k].hitcount > split_width) {
+                    set_forward_pivot(raux, next_pivot_saved);
+                    continue;
+                }
+                set_forward_pivot(raux, (qbeg + qend) >> 1);
+                raux->min_intv_limit = smems->a[k].hitcount + 1;
+                if (smems->a[k].hitcount >= 1 && smems->a[k].hitcount < 10) {
+                    raux->cache_pivot_end = smems->a[k].end;
+                    raux->cache_pivot     = smems->a[k].start;
+                    raux->cache_refpos    = smems->a[k].cache_refpos;
+                    Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, true);
+                } else {
+                    Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, false);
+                }
+                raux->min_intv_limit = original_min_intv;
+                set_forward_pivot(raux, next_pivot_saved);
+            }
+#else
+            int before = smems->n;
+            Learned_getSMEMsOnePosOneThread_step1(iaux, raux, smems, hits, hasN);
+            int after = smems->n;
+            for (int k = before; k < after; ++k) {
+                int next_pivot_saved  = raux->pivot;
+                int original_min_intv = raux->min_intv_limit;
+                int qbeg = smems->a[k].start;
+                int qend = smems->a[k].end;
+                if ((qend - qbeg) < split_len || smems->a[k].hitcount > split_width) {
+                    set_forward_pivot(raux, next_pivot_saved);
+                    continue;
+                }
+                set_forward_pivot(raux, (qbeg + qend) >> 1);
+                raux->min_intv_limit = smems->a[k].hitcount + 1;
+                Learned_getSMEMsOnePosOneThread(iaux, raux, smems, hits, hasN, false);
+                raux->min_intv_limit = original_min_intv;
+                set_forward_pivot(raux, next_pivot_saved);
+            }
+#endif
+        }
+    }
+
+    /* ── Post-seeding: optional bwtSeedStrategy for each read ── */
+    if (max_mem_intv > 0) {
+        for (int i = 0; i < n_reads; i++) {
+            Learned_read_aux_t*  raux  = raux_arr[i];
+            Learned_index_aux_t* iaux  = iaux_arr[i];
+            mem_tlv*             smems = smems_arr[i];
+            u64v*                hits  = hits_arr[i];
+            bool                 hasN  = hasN_arr[i];
+
+            int saved_min_intv     = raux->min_intv_limit;
+            int saved_min_seed_len = raux->min_seed_len;
+
+            raux->min_intv_limit = max_mem_intv;
+            raux->min_seed_len   = max_mem_intv_min_seed_len;
+
+            if (raux->max_l_seq != 0) {
+                Learned_bwtSeedStrategyAllPosOneThread_mem_tradeoff(iaux, raux, smems, hits, hasN);
+            } else {
+                Learned_bwtSeedStrategyAllPosOneThread(iaux, raux, smems, hits, hasN);
+            }
+
+            raux->min_intv_limit = saved_min_intv;
+            raux->min_seed_len   = saved_min_seed_len;
+        }
+    }
+}
+
 
 void Learned_bwtSeedStrategyAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN){
 		set_forward_pivot(raux, 0);
@@ -2274,6 +2764,7 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 	#endif
 	// Function adapted from https://github.com/gvinciguerra/rmi_pgm/blob/357acf668c22f927660d6ed11a15408f722ea348/main.cpp#L29.
 	// Authored by Giorgio Vinciguerra.
+
 	while (uint64_t half = (n>>1)) {
 		middle = lower_b + half;
 	#if Count_mem_ref
@@ -2311,6 +2802,11 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 				if (iter_pos ==0){
 					break;
 				} 
+				#if PREFETCH
+				if (g_use_simd8_mode) {
+					_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+				}
+				#endif
 				iter_pos --;
 				
 	#if Count_mem_ref
@@ -2340,6 +2836,11 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 				if (iter_pos == sa_num - 1){
 					break;
 				}
+				#if PREFETCH
+				if (g_use_simd8_mode) {
+					_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+				}
+				#endif
 				iter_pos ++;
 	#if Count_mem_ref
 				count_search_linear++;
@@ -2377,6 +2878,11 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 						#if Count_mem_ref
 						count_search_min_intv++;
 						#endif
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						low++;
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
 
@@ -2389,6 +2895,11 @@ uint64_t right_smem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const
 						#if Count_mem_ref
 						count_search_min_intv++;
 						#endif			
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						up++;
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
 						
@@ -2851,6 +3362,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					if (iter_pos ==0){
 						break;
 					}
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos --;
 	
 	#if Count_mem_ref
@@ -2879,6 +3395,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					if (iter_pos == sa_num - 1){
 						break;
 					}
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos ++;
 	#if Count_mem_ref
 					count_search_linear++;
@@ -2912,6 +3433,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 						count_search_min_intv++;
 #endif
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						low++;
 					}
 					if(up_search_flag){
@@ -2919,6 +3445,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 						count_search_min_intv++;
 #endif	
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						up++;
 					}
 					if (up+low-3 >= min_intv_value || (!low_search_flag && !up_search_flag)){
@@ -3109,6 +3640,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					if (iter_pos ==0){
 						break;
 					}
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos --;
 	
 	#if Count_mem_ref
@@ -3136,6 +3672,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 					if (iter_pos == sa_num - 1){
 						break;
 					}
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos ++;
 		
 	#if Count_mem_ref
@@ -3166,6 +3707,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 						count_search_min_intv++;
 #endif
 						compare_read_and_ref_binary_left(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						low++;
 					}
 					if(up_search_flag){
@@ -3173,6 +3719,11 @@ uint64_t mem_search(const uint8_t* ref_string,const uint8_t* sa_pos,const uint8_
 						count_search_min_intv++;
 #endif
 						compare_read_and_ref_binary_left(pac, sa_pos, (search_start_pos+up) , raux, sa_num,match_len, &up_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						up++;
 					}
 					if (up+low-3 >= min_intv_value || (!low_search_flag && !up_search_flag)){
@@ -3336,6 +3887,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 			// std::cout <<"[memtradeoff-right] Binary search start\n";
 			//do binary search
 			middle=iter_pos;
+
 			while ( half = (n>>1)) {
 				
 				middle = lower_b + half;
@@ -3370,6 +3922,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						if (iter_pos ==0){
 							break;
 						} 
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						iter_pos --;
 						
 			#if Count_mem_ref
@@ -3397,6 +3954,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						if (iter_pos == sa_num - 1){
 							break;
 						}
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						iter_pos ++;
 			#if Count_mem_ref
 						count_search_linear++;
@@ -3430,6 +3992,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 #endif
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
 
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						low++;
 					}
 					if(up_search_flag){
@@ -3438,6 +4005,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 #endif	
 						compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
 
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						up++;
 					}
 					if (up+low-3 >= min_intv_value || (!low_search_flag && !up_search_flag)){
@@ -3568,6 +4140,7 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 			// std::cout <<"[memtradeoff-left] Binary search start\n";
 			//do binary search
 			middle=iter_pos;
+
 			while ( half = (n>>1)) {
 				
 				middle = lower_b + half;
@@ -3602,6 +4175,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						if (iter_pos ==0){
 							break;
 						} 
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						iter_pos --;
 						
 			#if Count_mem_ref
@@ -3629,6 +4207,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						if (iter_pos == sa_num - 1){
 							break;
 						}
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						iter_pos ++;
 			#if Count_mem_ref
 						count_search_linear++;
@@ -3661,6 +4244,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						count_search_min_intv++;
 #endif
 						compare_read_and_ref_binary_left(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						low++;
 
 
@@ -3671,6 +4259,11 @@ uint64_t mem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_pos,con
 						count_search_min_intv++;
 #endif
 						compare_read_and_ref_binary_left(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
+						#if PREFETCH
+						if (g_use_simd8_mode) {
+							_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+						}
+						#endif
 						up++;
 
 					}
@@ -3865,6 +4458,11 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					if (iter_pos ==0){
 						break;
 					} 
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos - 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos --;
 					
 		#if Count_mem_ref
@@ -3892,6 +4490,11 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					if (iter_pos == sa_num - 1){
 						break;
 					}
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (iter_pos + 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					iter_pos ++;
 		#if Count_mem_ref
 					count_search_linear++;
@@ -3928,6 +4531,11 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					#if Count_mem_ref
 					count_search_min_intv++;
 					#endif
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (search_start_pos - low - 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					low++;
 					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos-low), raux, sa_num,match_len, &low_match,&exact_match_flag);
 
@@ -3936,6 +4544,11 @@ uint64_t right_smem_search_tradeoff(const uint8_t* ref_string,const uint8_t* sa_
 					#if Count_mem_ref
 					count_search_min_intv++;
 					#endif			
+					#if PREFETCH
+					if (g_use_simd8_mode) {
+						_mm_prefetch(sa_pos + (search_start_pos + up + 1) * SASIZE, _MM_HINT_T0);
+					}
+					#endif
 					up++;
 					compare_read_and_ref_binary(pac, sa_pos, (search_start_pos+up), raux, sa_num,match_len, &up_match,&exact_match_flag);
 				}

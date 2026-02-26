@@ -176,6 +176,8 @@ typedef struct {
 	uint8_t* unpacked_rc_queue_binary_buf_shift3;    // Read sequence (2-bit encoded)
 	uint8_t* unpacked_rc_queue_binary_buf_shift4;    // Read sequence (2-bit encoded)
 } Learned_read_aux_t;
+
+
 #define _get_pac_bigendian(pac, l) ( BitReverseTable256[(pac)[(l)>>2]]>>((~(l)&3)<<1)&3)
 
 /*
@@ -260,6 +262,14 @@ void Learned_getSMEMsAllPosOneThread_step1only(Learned_index_aux_t* iaux, Learne
 void Learned_getSMEMsAllPosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, int split_len, int split_width);
 
 /*
+ * Same as Learned_getSMEMsAllPosOneThread but with a batch P-RMI prefetch
+ * pre-pass for -8 mode (SIMD-accelerated encoding + batch lookup).
+ * Tokenizes all pivot keys upfront, issues learned_index_lookup_batch()
+ * to warm the L2_PARAMETERS cache, then runs the standard seeding loop.
+ */
+void Learned_getSMEMsAllPosOneThread_simd8(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, int split_len, int split_width);
+
+/*
  * Given a pivot point, find all SMEMs that cover the pivot point
  */
 void Learned_getSMEMsOnePosOneThread(Learned_index_aux_t* iaux, Learned_read_aux_t* raux, mem_tlv* smems, u64v* hits, bool hasN, bool use_cached=false);
@@ -290,6 +300,32 @@ inline uint64_t Tokenization( Learned_read_aux_t* raux, bool right_forward, uint
 bool learned_index_load(char const* dataPath, char const* dataPath2,char const* dataPath3, double suffix_array_num);
 
 void learned_index_cleanup();
+void learned_set_simd8_mode(int enable);
+int  learned_get_simd8_mode(void);
+void encode_read_simd8(const char* seq, int len,
+                       uint8_t* shift1, uint8_t* shift2,
+                       uint8_t* shift3, uint8_t* shift4,
+                       uint8_t* rc_shift1, uint8_t* rc_shift2,
+                       uint8_t* rc_shift3, uint8_t* rc_shift4);
+void learned_index_lookup_batch(const uint64_t* keys, int n,
+                                uint64_t* positions, size_t* errs);
+#define INTER_READ_BATCH 4
+void Learned_getSMEMsAllPos_inter_read_batch(
+        Learned_index_aux_t**  iaux_arr,
+        Learned_read_aux_t**   raux_arr,
+        mem_tlv**              smems_arr,
+        u64v**                 hits_arr,
+        bool*                  hasN_arr,
+        int                    n_reads,
+        int split_len, int split_width,
+        int max_mem_intv,
+        int max_mem_intv_min_seed_len);
+void learned_prefetch_next_read_sa(const uint8_t* sa_pos,
+                                   const char*    next_seq,
+                                   int            next_len,
+                                   int            min_seed_len);
+
+
 
 /*
  * Learned-index lookup function

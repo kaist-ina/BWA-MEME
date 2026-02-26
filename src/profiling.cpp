@@ -131,6 +131,10 @@ int display_stats(int nthreads)
     find_opt(tprof[LEARNED_SEED_CHAIN], nthreads, &max, &min, &avg);
     fprintf(stderr, "\t\LEARNED_SEED_CHAIN avg: %0.2lf, (%0.2lf, %0.2lf)\n",
             avg*1.0/proc_freq, max*1.0/proc_freq, min*1.0/proc_freq);
+
+    find_opt(tprof[LEARNED_EXACT_MEME], nthreads, &max, &min, &avg);
+    fprintf(stderr, "\t\tLEARNED_EXACT_MEME avg: %0.2lf, (%0.2lf, %0.2lf)\n",
+            avg*1.0/proc_freq, max*1.0/proc_freq, min*1.0/proc_freq);
 #endif
     
     find_opt(tprof[MEM_COLLECT], nthreads, &max, &min, &avg);
