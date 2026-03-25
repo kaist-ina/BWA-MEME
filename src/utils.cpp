@@ -47,7 +47,7 @@ KSORT_INIT(128, pair64_t, pair64_lt)
 KSORT_INIT(64,  uint64_t, ks_lt_generic)
 
 #include "kseq.h"
-KSEQ_INIT2(, gzFile, err_gzread)
+KSEQ_INIT2_BUFSIZE(, gzFile, err_gzread, (4 << 20))
 
 /********************
  * System utilities *

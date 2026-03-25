@@ -45,6 +45,7 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #include "bwamem.h"
 #include "ertseeding.h"
 #include "LearnedIndex_seeding.h"
+#include "fast_reader.h"
 #include "kthread.h"
 #include "kvec.h"
 #include "utils.h"
@@ -66,13 +67,17 @@ typedef struct {
 	int64_t actual_chunk_size;
 	FILE *fp;
 	uint8_t *ref_string;
-	FMI_search *fmi;	
+	FMI_search *fmi;
+	fast_reader_t *fast_reader;
+	fast_reader_t *fast_reader2;   /* R2 file for paired-end in -8 mode */
 } ktp_aux_t;
 
 typedef struct {
 	ktp_aux_t *aux;
 	int n_seqs;
 	bseq1_t *seqs;
+	str_arena_t str_arena;
+	int use_arena;
 } ktp_data_t;
 
     

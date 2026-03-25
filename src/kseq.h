@@ -239,6 +239,12 @@ typedef struct __kstring_t {
 	__KSEQ_BASIC(SCOPE, type_t)					\
 	__KSEQ_READ(SCOPE)
 
+#define KSEQ_INIT2_BUFSIZE(SCOPE, type_t, __read, __bufsize)	\
+	KSTREAM_INIT(type_t, __read, __bufsize)						\
+	__KSEQ_TYPE(type_t)											\
+	__KSEQ_BASIC(SCOPE, type_t)									\
+	__KSEQ_READ(SCOPE)
+
 #define KSEQ_INIT(type_t, __read) KSEQ_INIT2(static, type_t, __read)
 
 #define KSEQ_DECLARE(type_t)											\

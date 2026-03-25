@@ -32,6 +32,8 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #define BWA_H_
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <zlib.h>
 #include "bntseq.h"
 #include "bwt.h"
@@ -65,6 +67,44 @@ typedef struct {
 } bwaidx_t;
 
 
+#define STR_ARENA_BLOCK_SIZE (32 << 20) /* 32MB per block */
+
+typedef struct {
+    char **blocks;
+    int n_blocks;
+    int cap_blocks;
+    size_t cur_offset;
+} str_arena_t;
+
+static inline void str_arena_init(str_arena_t *a) {
+    a->cap_blocks = 16;
+    a->blocks = (char**)malloc(a->cap_blocks * sizeof(char*));
+    a->blocks[0] = (char*)malloc(STR_ARENA_BLOCK_SIZE);
+    a->n_blocks = 1;
+    a->cur_offset = 0;
+}
+
+static inline char *str_arena_alloc(str_arena_t *a, size_t size) {
+    if (a->cur_offset + size > STR_ARENA_BLOCK_SIZE) {
+        if (a->n_blocks >= a->cap_blocks) {
+            a->cap_blocks *= 2;
+            a->blocks = (char**)realloc(a->blocks, a->cap_blocks * sizeof(char*));
+        }
+        size_t bsz = STR_ARENA_BLOCK_SIZE > size ? STR_ARENA_BLOCK_SIZE : size;
+        a->blocks[a->n_blocks] = (char*)malloc(bsz);
+        a->n_blocks++;
+        a->cur_offset = 0;
+    }
+    char *ptr = a->blocks[a->n_blocks - 1] + a->cur_offset;
+    a->cur_offset += size;
+    return ptr;
+}
+
+static inline void str_arena_destroy(str_arena_t *a) {
+    for (int i = 0; i < a->n_blocks; i++) free(a->blocks[i]);
+    free(a->blocks);
+}
+
 typedef struct {
 	int l_seq, id;
 	char *name, *comment, *seq, *qual, *sam;
@@ -76,7 +116,7 @@ extern char bwa_rg_id[256];
 #ifdef __cplusplus
 extern "C" {
 #endif
-    bseq1_t *bseq_read_orig(int64_t chunk_size, int *n_, void *ks1_, void *ks2_, int64_t *s);
+    bseq1_t *bseq_read_orig(int64_t chunk_size, int *n_, void *ks1_, void *ks2_, int64_t *s, str_arena_t *arena);
 
     bseq1_t *bseq_read(int64_t chunk_size, int *n_, void *ks1_,
                        void *ks2_, FILE* fpp, int len,

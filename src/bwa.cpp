@@ -41,6 +41,10 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #include "kstring.h"
 #include "kvec.h"
 #include "memcpy_bwamem.h"
+#include "macro.h"
+#include <x86intrin.h>
+
+extern uint64_t tprof[LIM_R][LIM_C];
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,6 +90,35 @@ static inline void kseq2bseq1(const kseq_t *ks, bseq1_t *s)
     s->seq = strdup(ks->seq.s);
     s->qual = ks->qual.l? strdup(ks->qual.s) : 0;
     s->l_seq = strnlen_s(s->seq, ERT_MAX_READ_LEN);
+}
+
+static inline void kseq2bseq1_arena(const kseq_t *ks, bseq1_t *s, str_arena_t *arena)
+{
+    size_t name_l = ks->name.l;
+    size_t comment_l = ks->comment.l;
+    size_t seq_l = ks->seq.l;
+    size_t qual_l = ks->qual.l;
+
+    size_t total = (name_l + 1) + (seq_l + 1);
+    if (comment_l > 0) total += comment_l + 1;
+    if (qual_l > 0) total += qual_l + 1;
+
+    char *block = str_arena_alloc(arena, total);
+    char *p = block;
+
+    s->name = p; memcpy(p, ks->name.s, name_l + 1); p += name_l + 1;
+    if (comment_l > 0) {
+        s->comment = p; memcpy(p, ks->comment.s, comment_l + 1); p += comment_l + 1;
+    } else {
+        s->comment = NULL;
+    }
+    s->seq = p; memcpy(p, ks->seq.s, seq_l + 1); p += seq_l + 1;
+    if (qual_l > 0) {
+        s->qual = p; memcpy(p, ks->qual.s, qual_l + 1);
+    } else {
+        s->qual = NULL;
+    }
+    s->l_seq = seq_l;
 }
 
 /* Customized for MPI processing */
@@ -181,49 +214,79 @@ bseq1_t *bseq_read(int64_t chunk_size, int *n_, void *ks1_, void *ks2_,
     return seqs;
 }
 
-bseq1_t *bseq_read_orig(int64_t chunk_size, int *n_, void *ks1_, void *ks2_, int64_t *s)
+bseq1_t *bseq_read_orig(int64_t chunk_size, int *n_, void *ks1_, void *ks2_, int64_t *s, str_arena_t *arena)
 {
     kseq_t *ks = (kseq_t*)ks1_, *ks2 = (kseq_t*)ks2_;
     int64_t size = 0, m, n;
     bseq1_t *seqs;
-    m = n = 0; seqs = 0;
-    while (kseq_read(ks) >= 0)
+    uint64_t t_kseq = 0, t_copy = 0, t_realloc = 0, t0;
+
+    if (arena) {
+        /* -8 fast path: pre-allocate + arena */
+        m = chunk_size / 80 + 256;
+        seqs = (bseq1_t*) malloc(m * sizeof(bseq1_t));
+        str_arena_init(arena);
+    } else {
+        /* Original path (-7 / default) */
+        m = 0;
+        seqs = 0;
+    }
+    n = 0;
+
+    while (1)
     {
-        if (ks2 && kseq_read(ks2) < 0) { // the 2nd file has fewer reads
-            fprintf(stderr, "[W::%s] the 2nd file has fewer sequences.\n", __func__);
-            break;
+        t0 = __rdtsc();
+        int ret = kseq_read(ks);
+        t_kseq += __rdtsc() - t0;
+        if (ret < 0) break;
+
+        if (ks2) {
+            t0 = __rdtsc();
+            int ret2 = kseq_read(ks2);
+            t_kseq += __rdtsc() - t0;
+            if (ret2 < 0) {
+                fprintf(stderr, "[W::%s] the 2nd file has fewer sequences.\n", __func__);
+                break;
+            }
         }
         if (n >= m) {
+            t0 = __rdtsc();
             m = m? m<<1 : 256;
             seqs = (bseq1_t*) realloc(seqs, m * sizeof(bseq1_t));
+            t_realloc += __rdtsc() - t0;
         }
+        t0 = __rdtsc();
         trim_readno(&ks->name);
-        kseq2bseq1(ks, &seqs[n]);
+        if (arena)
+            kseq2bseq1_arena(ks, &seqs[n], arena);
+        else
+            kseq2bseq1(ks, &seqs[n]);
+        t_copy += __rdtsc() - t0;
         seqs[n].id = n;
-        //{
-        //  size += strlen(seqs[n].name);
-        //  size += strlen(seqs[n].comment);
-        //  size += strlen(seqs[n].qual);
-        //  // fprintf(stderr, "qual len: %d %d\n", strlen(seqs[n].qual), seqs[n].l_seq);
-        //  size += 7; // non accounted chars
-        //}
         size += seqs[n++].l_seq;
-        
+
         if (ks2) {
+            t0 = __rdtsc();
             trim_readno(&ks2->name);
-            kseq2bseq1(ks2, &seqs[n]);
+            if (arena)
+                kseq2bseq1_arena(ks2, &seqs[n], arena);
+            else
+                kseq2bseq1(ks2, &seqs[n]);
+            t_copy += __rdtsc() - t0;
             seqs[n].id = n;
             size += seqs[n++].l_seq;
         }
         if (size >= chunk_size && (n&1) == 0) break;
-        // if (size >= chunk_size) {
-        //  break;
-        // }
     }
-    if (size == 0) { // test if the 2nd file is finished
+    if (size == 0) {
         if (ks2 && kseq_read(ks2) >= 0)
             fprintf(stderr, "[W::%s] the 1st file has fewer sequences.\n", __func__);
+        free(seqs);
+        seqs = 0;
     }
+    tprof[READ_IO_KSEQ][0] += t_kseq;
+    tprof[READ_IO_COPY][0] += t_copy;
+    tprof[READ_IO_REALLOC][0] += t_realloc;
     *n_ = n;
     *s = size;
     return seqs;
@@ -232,7 +295,7 @@ bseq1_t *bseq_read_orig(int64_t chunk_size, int *n_, void *ks1_, void *ks2_, int
 bseq1_t *bseq_read_one_fasta_file(int64_t chunk_size, int *n_, gzFile fp, int64_t *s)
 {
     kseq_t *ks = kseq_init(fp);
-    bseq1_t *seq = bseq_read_orig(chunk_size, n_, ks, NULL, s);
+    bseq1_t *seq = bseq_read_orig(chunk_size, n_, ks, NULL, s, NULL);
     kseq_destroy(ks);
     return seq;
 }

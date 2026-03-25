@@ -66,6 +66,12 @@ int display_stats(int nthreads)
     find_opt(tprof[READ_IO], 1, &max, &min, &avg);
     fprintf(stderr, "\tReading IO time (reads) avg: %0.2lf, (%0.2lf, %0.2lf)\n",
             avg*1.0/proc_freq, max*1.0/proc_freq, min*1.0/proc_freq);
+    fprintf(stderr, "\t  |- decompress/read:   %0.2lf sec\n",
+            tprof[READ_IO_KSEQ][0]*1.0/proc_freq);
+    fprintf(stderr, "\t  |- parse+copy:        %0.2lf sec\n",
+            tprof[READ_IO_COPY][0]*1.0/proc_freq);
+    fprintf(stderr, "\t  |- realloc:           %0.2lf sec\n",
+            tprof[READ_IO_REALLOC][0]*1.0/proc_freq);
 
     find_opt(tprof[SAM_IO], 1, &max, &min, &avg);
     fprintf(stderr, "\tWriting IO time (SAM) avg: %0.2lf, (%0.2lf, %0.2lf)\n",

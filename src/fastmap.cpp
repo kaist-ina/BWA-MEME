@@ -635,6 +635,7 @@ void memoryAllocLearned(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nth
 
     w.useErt = 0;
     w.useLearned = 1;
+    w.useLearnedInterleaved = 0;
 }
 
 /*** Memory pre-allocations ***/
@@ -740,27 +741,42 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
 
         /* Read "reads" from input file (fread) */
         int64_t sz = 0;
-        ret->seqs = bseq_read_orig(aux->task_size,
-                                   &ret->n_seqs,
-                                   aux->ks, aux->ks2,
-                                   &sz);
+        ret->use_arena = w.useLearnedInterleaved;
+        if (ret->use_arena && aux->fast_reader) {
+            if (aux->fast_reader2) {
+                ret->seqs = fast_reader_read_chunk_pe(aux->fast_reader, aux->fast_reader2,
+                                                      aux->task_size,
+                                                      &ret->n_seqs, &sz, &ret->str_arena);
+            } else {
+                ret->seqs = fast_reader_read_chunk(aux->fast_reader, aux->task_size,
+                                                   &ret->n_seqs, &sz, &ret->str_arena);
+            }
+        } else {
+            ret->seqs = bseq_read_orig(aux->task_size,
+                                       &ret->n_seqs,
+                                       aux->ks, aux->ks2,
+                                       &sz,
+                                       ret->use_arena ? &ret->str_arena : NULL);
+        }
 
         tprof[READ_IO][0] += __rdtsc() - tim;
-        
-        fprintf(stderr, "[0000] read_chunk: %ld, work_chunk_size: %ld, nseq: %d\n",
-                aux->task_size, sz, ret->n_seqs);   
+
+        if (bwa_verbose >= 4)
+            fprintf(stderr, "[0000] read_chunk: %ld, work_chunk_size: %ld, nseq: %d\n",
+                    aux->task_size, sz, ret->n_seqs);
 
         if (ret->seqs == 0) {
+            if (ret->use_arena) str_arena_destroy(&ret->str_arena);
             free(ret);
             return 0;
         }
         if (!aux->copy_comment){
             for (int i = 0; i < ret->n_seqs; ++i){
-                free(ret->seqs[i].comment);
+                if (!ret->use_arena) free(ret->seqs[i].comment);
                 ret->seqs[i].comment = 0;
             }
         }
-        {
+        if (bwa_verbose >= 4) {
             int64_t size = 0;
             for (int i = 0; i < ret->n_seqs; ++i) size += ret->seqs[i].l_seq;
 
@@ -775,7 +791,7 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
         static int task = 0;
         if (w.nreads < ret->n_seqs)
         {
-            fprintf(stderr, "[0000] Reallocating initial memory allocations!!\n");
+            if (bwa_verbose >= 4) fprintf(stderr, "[0000] Reallocating initial memory allocations!!\n");
             free(w.regs); free(w.chain_ar); free(w.seedBuf);
             w.nreads = ret->n_seqs;
             w.regs = (mem_alnreg_v *) calloc(w.nreads, sizeof(mem_alnreg_v));
@@ -784,7 +800,7 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
             assert(w.regs != NULL); assert(w.chain_ar != NULL); assert(w.seedBuf != NULL);
         }       
                                 
-        fprintf(stderr, "[0000] Calling mem_process_seqs.., task: %d\n", task++);
+        if (bwa_verbose >= 4) fprintf(stderr, "[0000] Calling mem_process_seqs.., task: %d\n", task++);
 
         uint64_t tim = __rdtsc();
         if (opt->flag & MEM_F_SMARTPE)
@@ -795,8 +811,9 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
 
             bseq_classify(ret->n_seqs, ret->seqs, n_sep, sep);
 
-            fprintf(stderr, "[M::%s] %d single-end sequences; %d paired-end sequences.....\n",
-                    __func__, n_sep[0], n_sep[1]);
+            if (bwa_verbose >= 4)
+                fprintf(stderr, "[M::%s] %d single-end sequences; %d paired-end sequences.....\n",
+                        __func__, n_sep[0], n_sep[1]);
             
             if (n_sep[0]) {
                 tmp_opt.flag &= ~MEM_F_PE;
@@ -848,16 +865,22 @@ ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, work
         for (int i = 0; i < ret->n_seqs; ++i)
         {
             if (ret->seqs[i].sam) {
-                // err_fputs(ret->seqs[i].sam, stderr);
                 fputs(ret->seqs[i].sam, aux->fp);
             }
-            free(ret->seqs[i].name); free(ret->seqs[i].comment);
-            free(ret->seqs[i].seq); free(ret->seqs[i].qual);
             free(ret->seqs[i].sam);
+            if (!ret->use_arena) {
+                free(ret->seqs[i].name); free(ret->seqs[i].comment);
+                free(ret->seqs[i].seq); free(ret->seqs[i].qual);
+            }
         }
+        if (ret->use_arena) str_arena_destroy(&ret->str_arena);
         free(ret->seqs);
         free(ret);
         tprof[SAM_IO][0] += __rdtsc() - tim;
+
+        if (bwa_verbose < 4) {
+            fprintf(stderr, ".");
+        }
 
         return 0;
     } // step 2
@@ -906,7 +929,7 @@ static void *ktp_worker(void *data)
     pthread_exit(0);
 }
 
-static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char* idx_prefix, int algo_num)
+static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char* idx_prefix, int algo_num, int useLearnedInterleaved)
 {
     ktp_aux_t   *aux = (ktp_aux_t*) shared;
     worker_t     w;
@@ -1009,6 +1032,7 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
     else {
         memoryAlloc(aux, w, nreads, nthreads);
     }
+    if (useLearnedInterleaved) w.useLearnedInterleaved = 1;
     fprintf(stderr, "* Threads used (compute): %d\n", nthreads);
     
     /* pipeline using pthreads */
@@ -1061,6 +1085,7 @@ static int process(void *shared, gzFile gfp, gzFile gfp2, int pipe_threads, char
     free(aux_.workers);
     /***** pipeline ends ******/
     
+    if (bwa_verbose < 4) fprintf(stderr, "\n");
     fprintf(stderr, "[0000] Computation ends..\n");
     
     /* Dealloc memory allcoated in the header section */    
@@ -1203,6 +1228,7 @@ int main_mem(int argc, char *argv[])
     const char  *mode                      = 0;
     int useErt = 0;
     int useLearned = 0;
+    int useLearnedInterleaved = 0;
     char  *idx_prefix = 0;
     int algo_num = 0;
     
@@ -1226,7 +1252,7 @@ int main_mem(int argc, char *argv[])
     
     /* Parse input arguments */
     // comment: added option '5' in the list
-    while ((c = getopt(argc, argv, "51qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:7")) >= 0)
+    while ((c = getopt(argc, argv, "51qpaMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:H:o:f:Z:78")) >= 0)
     {
         if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
         else if (c == '1') no_mt_io = 1;
@@ -1364,6 +1390,10 @@ int main_mem(int argc, char *argv[])
         }
         else if (c == '7') {
             useLearned = 1;
+        }
+        else if (c == '8') {
+            useLearned = 1;
+            useLearnedInterleaved = 1;
         }
         else {
             free(opt);
@@ -1540,13 +1570,23 @@ int main_mem(int argc, char *argv[])
         _mm_free(ref_string);
         return 1;
     }
-    // fp = gzopen(argv[optind + 1], "r");
-    fp = gzdopen(fd, "r");
-    aux.ks = kseq_init(fp);
-    
+    // For -8 mode: use ISA-L fast reader instead of gzread/kseq
+    aux.fast_reader = NULL;
+    if (useLearnedInterleaved) {
+        aux.fast_reader = fast_reader_open(fd, argv[optind + 1]);
+        fp = NULL;
+        aux.ks = NULL;
+    } else {
+        // fp = gzopen(argv[optind + 1], "r");
+        fp = gzdopen(fd, "r");
+        gzbuffer(fp, 4 << 20);
+        aux.ks = kseq_init(fp);
+    }
+
     // PAIRED_END
     /* Handling Paired-end reads */
     aux.ks2 = 0;
+    aux.fast_reader2 = NULL;
     if (optind + 2 < argc) {
         if (opt->flag & MEM_F_PE) {
             fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n",
@@ -1559,21 +1599,25 @@ int main_mem(int argc, char *argv[])
                 fprintf(stderr, "[E::%s] failed to open file `%s'.\n", __func__, argv[optind + 2]);
                 free(opt);
                 free(ko);
-                err_gzclose(fp);
-                kseq_destroy(aux.ks);
-                if (is_o) 
-                    fclose(aux.fp);             
+                if (!useLearnedInterleaved) {
+                    err_gzclose(fp);
+                    kseq_destroy(aux.ks);
+                }
+                if (is_o)
+                    fclose(aux.fp);
                 delete aux.fmi;
                 kclose(ko);
-                // kclose(ko2);
                 _mm_free(ref_string);
                 return 1;
-            }            
-            // fp2 = gzopen(argv[optind + 2], "r");
-            fp2 = gzdopen(fd2, "r");
-            aux.ks2 = kseq_init(fp2);
+            }
+            if (useLearnedInterleaved) {
+                aux.fast_reader2 = fast_reader_open(fd2, argv[optind + 2]);
+            } else {
+                fp2 = gzdopen(fd2, "r");
+                gzbuffer(fp2, 4 << 20);
+                aux.ks2 = kseq_init(fp2);
+            }
             opt->flag |= MEM_F_PE;
-            assert(aux.ks2 != 0);
         }
     }
 
@@ -1590,7 +1634,7 @@ int main_mem(int argc, char *argv[])
     tim = __rdtsc();
 
     /* Relay process function */
-    process(&aux, fp, fp2, no_mt_io? 1:2, idx_prefix, algo_num);
+    process(&aux, fp, fp2, no_mt_io? 1:2, idx_prefix, algo_num, useLearnedInterleaved);
     
     tprof[PROCESS][0] += __rdtsc() - tim;
 
@@ -1599,11 +1643,19 @@ int main_mem(int argc, char *argv[])
     _mm_free(ref_string);
     free(hdr_line);
     free(opt);
-    kseq_destroy(aux.ks);   
-    err_gzclose(fp); kclose(ko);
+    if (aux.fast_reader) {
+        fast_reader_close(aux.fast_reader);
+    } else {
+        kseq_destroy(aux.ks);
+        err_gzclose(fp);
+    }
+    kclose(ko);
 
     // PAIRED_END
-    if (aux.ks2) {
+    if (aux.fast_reader2) {
+        fast_reader_close(aux.fast_reader2);
+        kclose(ko2);
+    } else if (aux.ks2) {
         kseq_destroy(aux.ks2);
         err_gzclose(fp2); kclose(ko2);
     }

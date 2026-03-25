@@ -176,6 +176,9 @@ Authors: Vasimuddin Md <vasimuddin.md@intel.com>; Sanchit Misra <sanchit.misra@i
 #define PE26 112
 #define ERT_SEED_CHAIN 113
 #define LEARNED_SEED_CHAIN 114
+#define READ_IO_KSEQ 115
+#define READ_IO_COPY 116
+#define READ_IO_REALLOC 117
 
 //////////////////////
 // ERT macros

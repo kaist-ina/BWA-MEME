@@ -1778,7 +1778,7 @@ static void worker_bwt(void *data, long seq_id, long batch_size, int tid)
                              w->ref2sa,
                              w->ref_string,
                              w->l_smems + (tid * MAX_LINE_LEN),
-                             w->hits_ar + (tid * MAX_LINE_LEN), 
+                             w->hits_ar + (tid * MAX_LINE_LEN),
                              tid);
 
     }
@@ -1935,15 +1935,15 @@ void mem_process_seqs(mem_opt_t *opt,
     //int n_ = (opt->flag & MEM_F_PE) ? n : n;   // this requires n%2==0
     int n_ = n;
     
-    uint64_t tim = __rdtsc();   
+    uint64_t tim = __rdtsc();
     fprintf(stderr, "[0000] 1. Calling kt_for - worker_bwt\n");
-    
+
     kt_for(worker_bwt, &w, n_); // SMEMs (+SAL)
 
     fprintf(stderr, "[0000] 2. Calling kt_for - worker_aln\n");
-    
+
     kt_for(worker_aln, &w, n_); // BSW
-    tprof[WORKER10][0] += __rdtsc() - tim;      
+    tprof[WORKER10][0] += __rdtsc() - tim;
 
 
     // PAIRED_END
@@ -1958,11 +1958,11 @@ void mem_process_seqs(mem_opt_t *opt,
                                                          // distribution from data
         }
     }
-    
+
     tim = __rdtsc();
     fprintf(stderr, "[0000] 3. Calling kt_for - worker_sam\n");
-    
-    kt_for(worker_sam, &w,  n_);   // SAM   
+
+    kt_for(worker_sam, &w,  n_);   // SAM
     tprof[WORKER20][0] += __rdtsc() - tim;
 
     fprintf(stderr, "\t[0000][ M::%s] Processed %d reads in %.3f "
