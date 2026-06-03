@@ -135,7 +135,7 @@ int display_stats(int nthreads)
             avg*1.0/proc_freq, max*1.0/proc_freq, min*1.0/proc_freq);
             
     find_opt(tprof[LEARNED_SEED_CHAIN], nthreads, &max, &min, &avg);
-    fprintf(stderr, "\t\LEARNED_SEED_CHAIN avg: %0.2lf, (%0.2lf, %0.2lf)\n",
+    fprintf(stderr, "\t\tLEARNED_SEED_CHAIN avg: %0.2lf, (%0.2lf, %0.2lf)\n",
             avg*1.0/proc_freq, max*1.0/proc_freq, min*1.0/proc_freq);
 #endif
     
