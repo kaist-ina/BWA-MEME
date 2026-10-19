@@ -341,6 +341,7 @@ void memoryAllocErt(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nthread
         kv_init_base(uint64_t, w.hits_ar[i * MAX_LINE_LEN], MAX_HITS_PER_READ);
     }
     w.useErt = 1;
+    w.useLearnedInterleaved = 0;
 
     fprintf(stderr, "Memory pre-allocation for ERT: %0.4lf GB\n", allocMem/1e9);
     fprintf(stderr, "------------------------------------------\n");
@@ -726,6 +727,7 @@ void memoryAlloc(ktp_aux_t *aux, worker_t &w, int32_t nreads, int32_t nthreads)
 
     w.useErt = 0;
     w.useLearned = 0;
+    w.useLearnedInterleaved = 0;
 }
 
 ktp_data_t *kt_pipeline(void *shared, int step, void *data, mem_opt_t *opt, worker_t &w)
