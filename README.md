@@ -95,7 +95,7 @@ diff <output_mem2.sam> <output_meme.sam>
 ### Install Option 2. Build locally
 #### Required libraries
 ```sh
-sudo apt-get install libz-dev cmake
+sudo apt-get install libz-dev libisal-dev cmake
 ```
 #### Compile the code
 ```sh
