@@ -259,6 +259,7 @@ typedef struct worker_t {
     int32_t           nreads;
     FMI_search       *fmi;  
     int useLearned;
+    int useLearnedInterleaved;
     uint8_t* sa_position;
     uint8_t* ref2sa;
     uint8_t  *rc_pac;
